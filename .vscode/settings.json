@@ -1,17 +1,21 @@
 {
 	// hide files that we usually don't need to see in explorer
 	"files.exclude": {
-		"**/.git": true,
-		"**/.svn": true,
-		"**/.hg": true,
-		"**/CVS": true,
-		"**/.DS_Store": true,
-		"**/Thumbs.db": true,
-
-		"**/.svelte-kit": true,
-		"**/node_modules": true,
 		".npmrc": true,
 		".gitattributes": true
+	},
+
+	"files.readonlyInclude": {
+		"**/.svelte-kit/**": true,
+		"pnpm-lock.yaml": true
+	},
+	"files.watcherExclude": {
+		"**/.svelte-kit/**": true,
+		"pnpm-lock.yaml": true
+	},
+	"search.exclude": {
+		"**/.svelte-kit/**": true,
+		"pnpm-lock.yaml": true
 	},
 
 	// use LF line endings
