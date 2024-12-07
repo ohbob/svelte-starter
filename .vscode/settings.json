@@ -6,11 +6,11 @@
 	},
 
 	"files.readonlyInclude": {
-		"**/.svelte-kit/**": true,
+		"**/.svelte-kit/*/**": true,
 		"pnpm-lock.yaml": true
 	},
 	"files.watcherExclude": {
-		"**/.svelte-kit/**": true,
+		"**/.svelte-kit/*/**": true,
 		"pnpm-lock.yaml": true
 	},
 	"search.exclude": {
