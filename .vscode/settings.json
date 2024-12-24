@@ -38,9 +38,5 @@
 	"svelte.enable-ts-plugin": true,
 	"[svelte]": {
 		"editor.defaultFormatter": "svelte.svelte-vscode"
-	},
-
-	// auto-format on save & paste
-	"editor.formatOnSave": true,
-	"editor.formatOnPaste": true
+	}
 }
