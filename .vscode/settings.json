@@ -1,10 +1,4 @@
 {
-	// hide files that we usually don't need to see in explorer
-	"files.exclude": {
-		".npmrc": true,
-		".gitattributes": true
-	},
-
 	"files.readonlyInclude": {
 		"**/.svelte-kit/*/**": true,
 		"pnpm-lock.yaml": true,
@@ -19,6 +13,13 @@
 		"**/.svelte-kit/**": true,
 		"pnpm-lock.yaml": true,
 		"bun.lock": true
+	},
+
+	"explorer.fileNesting.enabled": true,
+	"explorer.fileNesting.patterns": {
+		"tsconfig.json": "tsconfig.*.json, env.d.ts",
+		"vite.config.*": "jsconfig*, vitest.config.*, cypress.config.*, playwright.config.*",
+		"package.json": "package-lock.json, pnpm*, .yarnrc*, yarn*, .eslint*, eslint*, .prettier*, prettier*, .editorconfig, .gitattributes, bun.lock, .npmrc"
 	},
 
 	// use LF line endings
