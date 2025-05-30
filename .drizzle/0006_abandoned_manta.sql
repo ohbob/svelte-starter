@@ -1,0 +1,2 @@
+ALTER TABLE "daily_analytics" ADD CONSTRAINT "daily_analytics_user_id_date_unique" UNIQUE("user_id","date");--> statement-breakpoint
+ALTER TABLE "referrer_analytics" ADD CONSTRAINT "referrer_analytics_user_id_date_domain_path_unique" UNIQUE("user_id","date","domain","path");

@@ -1,0 +1,1 @@
+ALTER TABLE "analytics" ALTER COLUMN "ip_address" SET DATA TYPE text;

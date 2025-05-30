@@ -1,20 +1,297 @@
-<div class="flex flex-col gap-4">
-	<h2 class="text-2xl font-semibold">Dashboard</h2>
+<script lang="ts">
+	let { data } = $props();
 
-	<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-		<div class="rounded-lg border bg-card p-6 text-card-foreground">
-			<h3 class="text-lg font-medium">Welcome to your app!</h3>
-			<p class="mt-2 text-sm text-muted-foreground">This is your protected dashboard area.</p>
+	// Prepare chart data
+	const chartData = data.analytics.dailyViews.map((item) => ({
+		date: new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+		views: item.views,
+	}));
+
+	// Get max views for chart scaling
+	const maxViews = Math.max(...chartData.map((d) => d.views), 1);
+</script>
+
+<div class="p-6">
+	<!-- Dashboard Stats -->
+	<div class="mb-6 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+		<div class="rounded-lg border border-gray-200 bg-white p-6">
+			<div class="flex items-center">
+				<div class="flex-shrink-0">
+					<svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+						/>
+					</svg>
+				</div>
+				<div class="ml-4">
+					<div class="text-sm font-medium text-gray-500">Total Services</div>
+					<div class="text-2xl font-bold text-gray-900">{data.services?.length || 0}</div>
+				</div>
+			</div>
 		</div>
 
-		<div class="rounded-lg border bg-card p-6 text-card-foreground">
-			<h3 class="text-lg font-medium">Quick Actions</h3>
-			<p class="mt-2 text-sm text-muted-foreground">Add your main app features here.</p>
+		<div class="rounded-lg border border-gray-200 bg-white p-6">
+			<div class="flex items-center">
+				<div class="flex-shrink-0">
+					<svg class="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+						/>
+					</svg>
+				</div>
+				<div class="ml-4">
+					<div class="text-sm font-medium text-gray-500">Active Services</div>
+					<div class="text-2xl font-bold text-gray-900">
+						{data.services?.filter((s) => s.isActive).length || 0}
+					</div>
+				</div>
+			</div>
 		</div>
 
-		<div class="rounded-lg border bg-card p-6 text-card-foreground">
-			<h3 class="text-lg font-medium">Analytics</h3>
-			<p class="mt-2 text-sm text-muted-foreground">View your app metrics and data.</p>
+		<div class="rounded-lg border border-gray-200 bg-white p-6">
+			<div class="flex items-center">
+				<div class="flex-shrink-0">
+					<svg
+						class="h-8 w-8 text-purple-600"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+						/>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+						/>
+					</svg>
+				</div>
+				<div class="ml-4">
+					<div class="text-sm font-medium text-gray-500">Total Views</div>
+					<div class="text-2xl font-bold text-gray-900">{data.analytics.totalViews}</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="rounded-lg border border-gray-200 bg-white p-6">
+			<div class="flex items-center">
+				<div class="flex-shrink-0">
+					<svg
+						class="h-8 w-8 text-orange-600"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+						/>
+					</svg>
+				</div>
+				<div class="ml-4">
+					<div class="text-sm font-medium text-gray-500">Views (30 days)</div>
+					<div class="text-2xl font-bold text-gray-900">{data.analytics.recentViews}</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Analytics and Quick Actions -->
+	<div class="grid gap-6 lg:grid-cols-3">
+		<!-- Views Chart -->
+		<div class="overflow-hidden rounded-lg border border-gray-200 bg-white lg:col-span-2">
+			<div class="border-b border-gray-200 px-6 py-4">
+				<h2 class="text-lg font-semibold text-gray-900">Daily Views (Last 30 Days)</h2>
+			</div>
+			<div class="p-6">
+				{#if chartData.length > 0}
+					<div class="space-y-3">
+						{#each chartData as day}
+							<div class="flex items-center gap-3">
+								<div class="w-16 font-mono text-xs text-gray-500">{day.date}</div>
+								<div class="flex flex-1 items-center gap-2">
+									<div class="relative h-2 flex-1 overflow-hidden rounded-full bg-gray-100">
+										<div
+											class="h-full rounded-full bg-blue-500 transition-all duration-300"
+											style:width="{(day.views / maxViews) * 100}%"
+										></div>
+									</div>
+									<div class="w-8 text-right text-xs font-medium text-gray-700">{day.views}</div>
+								</div>
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<div class="py-8 text-center">
+						<svg
+							class="mx-auto mb-4 h-12 w-12 text-gray-400"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+							/>
+						</svg>
+						<h3 class="mb-2 text-lg font-medium text-gray-900">No views yet</h3>
+						<p class="text-sm text-gray-500">Share your portfolio to start getting views!</p>
+					</div>
+				{/if}
+			</div>
+		</div>
+
+		<!-- Quick Actions -->
+		<div class="overflow-hidden rounded-lg border border-gray-200 bg-white">
+			<div class="border-b border-gray-200 px-6 py-4">
+				<h2 class="text-lg font-semibold text-gray-900">Quick Actions</h2>
+			</div>
+			<div class="space-y-4 p-6">
+				<a
+					href="/app/services"
+					class="flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-colors hover:border-gray-300"
+				>
+					<div class="flex items-center gap-3">
+						<svg
+							class="h-5 w-5 text-gray-600"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+							/>
+						</svg>
+						<div>
+							<div class="font-medium text-gray-900">Add Service</div>
+							<div class="text-sm text-gray-500">Create new offering</div>
+						</div>
+					</div>
+					<svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M9 5l7 7-7 7"
+						/>
+					</svg>
+				</a>
+
+				<a
+					href="/app/profile"
+					class="flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-colors hover:border-gray-300"
+				>
+					<div class="flex items-center gap-3">
+						<svg
+							class="h-5 w-5 text-gray-600"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+							/>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+							/>
+						</svg>
+						<div>
+							<div class="font-medium text-gray-900">Update Profile</div>
+							<div class="text-sm text-gray-500">Customize settings</div>
+						</div>
+					</div>
+					<svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M9 5l7 7-7 7"
+						/>
+					</svg>
+				</a>
+
+				{#if data.user?.customUrl}
+					<a
+						href="/u/{data.user.customUrl}"
+						target="_blank"
+						class="flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-colors hover:border-gray-300"
+					>
+						<div class="flex items-center gap-3">
+							<svg
+								class="h-5 w-5 text-gray-600"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+								/>
+							</svg>
+							<div>
+								<div class="font-medium text-gray-900">View Portfolio</div>
+								<div class="text-sm text-gray-500">See public page</div>
+							</div>
+						</div>
+						<svg
+							class="h-5 w-5 text-gray-400"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+							/>
+						</svg>
+					</a>
+				{/if}
+
+				<!-- Top Referrers -->
+				{#if data.analytics.topReferrers.length > 0}
+					<div class="border-t border-gray-200 pt-4">
+						<h3 class="mb-3 text-sm font-medium text-gray-900">Top Referrers</h3>
+						<div class="space-y-2">
+							{#each data.analytics.topReferrers as referrer}
+								<div class="flex items-center justify-between text-sm">
+									<div class="mr-2 flex-1 truncate text-gray-600">
+										{referrer.domain}
+									</div>
+									<div class="font-medium text-gray-900">{referrer.views}</div>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/if}
+			</div>
 		</div>
 	</div>
 </div>
