@@ -32,6 +32,9 @@ export const auth = betterAuth({
 		discord: {
 			clientId: env.DISCORD_CLIENT_ID!,
 			clientSecret: env.DISCORD_CLIENT_SECRET!,
+			// authorizationParams: {
+			// 	consent: 'none'  // This is more widely supported
+			// }
 		},
 	},
 
