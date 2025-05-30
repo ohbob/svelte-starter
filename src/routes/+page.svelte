@@ -17,7 +17,7 @@
 	{#if $session.data}
 		<div class="flex flex-col gap-2">
 			<p>Welcome back, {$session?.data.user.name}!</p>
-			<Button href="/dashboard" class="w-fit" size="lg">Go to Dashboard</Button>
+			<Button href="/app" class="w-fit" size="lg">Go to App</Button>
 			<div>
 				More data from auth client:
 				<pre>{JSON.stringify($session?.data.user, null, 2)}</pre>

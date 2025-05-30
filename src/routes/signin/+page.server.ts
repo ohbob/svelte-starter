@@ -5,7 +5,7 @@ import type { PageServerLoad } from "./$types";
 export const load: PageServerLoad = async (event) => {
 	const session = await auth.api.getSession({ headers: event.request.headers });
 
-	const redirectPath = "/dashboard";
+	const redirectPath = "/app";
 
 	if (session) {
 		redirect(302, redirectPath);
