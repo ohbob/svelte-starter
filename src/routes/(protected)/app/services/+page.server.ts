@@ -4,144 +4,87 @@ import { services, user } from "$lib/server/schema";
 import { fail, redirect } from "@sveltejs/kit";
 import { and, eq } from "drizzle-orm";
 
-export const load = async ({ request }) => {
-	const session = await auth.api.getSession({
-		headers: request.headers,
-	});
+// Helper: Get authenticated session or fail
+const getAuthenticatedSession = async (request) => {
+	const session = await auth.api.getSession({ headers: request.headers });
+	if (!session) throw redirect(302, "/");
+	return session;
+};
 
-	if (!session) {
-		throw redirect(302, "/");
+// Helper: Extract and validate form data
+const extractServiceData = (formData) => {
+	const title = formData.get("title")?.toString()?.trim();
+	const description = formData.get("description")?.toString()?.trim();
+	const price = formData.get("price")?.toString()?.trim();
+	const category = formData.get("category")?.toString()?.trim();
+	const isActive = formData.get("isActive") === "on";
+
+	if (!title || !description || !price) {
+		throw new Error("Please fill in all required fields");
 	}
 
-	// Get user data
-	const [userData] = await db.select().from(user).where(eq(user.id, session.user.id)).limit(1);
+	return { title, description, price, category: category || null, isActive };
+};
 
-	// Get user's services
-	const userServices = await db
-		.select()
-		.from(services)
-		.where(eq(services.userId, session.user.id))
-		.orderBy(services.createdAt);
+// Helper: Handle database operations with consistent error handling
+const handleDbOperation = async (operation, errorMessage) => {
+	try {
+		return await operation();
+	} catch (error) {
+		console.error(`${errorMessage}:`, error);
+		throw new Error(errorMessage);
+	}
+};
+
+export const load = async ({ request }) => {
+	const session = await getAuthenticatedSession(request);
+
+	const [userData, userServices] = await Promise.all([
+		db.select().from(user).where(eq(user.id, session.user.id)).limit(1),
+		db
+			.select()
+			.from(services)
+			.where(eq(services.userId, session.user.id))
+			.orderBy(services.createdAt),
+	]);
 
 	return {
-		user: userData,
+		user: userData[0],
 		services: userServices,
 	};
 };
 
 export const actions = {
 	create: async ({ request }) => {
-		const session = await auth.api.getSession({
-			headers: request.headers,
-		});
-
-		if (!session) {
-			return fail(401, { error: "Unauthorized" });
-		}
-
+		const session = await getAuthenticatedSession(request);
 		const formData = await request.formData();
-		const title = formData.get("title")?.toString()?.trim();
-		const description = formData.get("description")?.toString()?.trim();
-		const price = formData.get("price")?.toString()?.trim();
-		const category = formData.get("category")?.toString()?.trim();
-		const isActive = formData.get("isActive") === "on";
-
-		if (!title || !description || !price) {
-			return fail(400, { error: "Please fill in all required fields" });
-		}
 
 		try {
-			const [newService] = await db
-				.insert(services)
-				.values({
-					id: crypto.randomUUID(),
-					title,
-					description,
-					price,
-					category: category || null,
-					isActive,
-					userId: session.user.id,
-					createdAt: new Date(),
-					updatedAt: new Date(),
-				})
-				.returning();
+			const serviceData = extractServiceData(formData);
 
-			// Create notification with new clean API
-			// await notification.success(
-			// 	"Service Created",
-			// 	`Your new service "${title}" has been added to your portfolio and is now live.`,
-			// 	{ userId: session.user.id }
-			// );
+			const newService = await handleDbOperation(
+				() =>
+					db
+						.insert(services)
+						.values({
+							id: crypto.randomUUID(),
+							...serviceData,
+							userId: session.user.id,
+							createdAt: new Date(),
+							updatedAt: new Date(),
+						})
+						.returning(),
+				"Failed to create service"
+			);
 
-			return { success: true, action: "create", service: newService };
+			return { success: true, action: "create", service: newService[0] };
 		} catch (error) {
-			console.error("Error creating service:", error);
-			return fail(500, { error: "Failed to create service" });
+			return fail(error.message.includes("required fields") ? 400 : 500, { error: error.message });
 		}
 	},
 
 	update: async ({ request }) => {
-		const session = await auth.api.getSession({
-			headers: request.headers,
-		});
-
-		if (!session) {
-			return fail(401, { error: "Unauthorized" });
-		}
-
-		const formData = await request.formData();
-		const serviceId = formData.get("serviceId")?.toString();
-		const title = formData.get("title")?.toString()?.trim();
-		const description = formData.get("description")?.toString()?.trim();
-		const price = formData.get("price")?.toString()?.trim();
-		const category = formData.get("category")?.toString()?.trim();
-		const isActive = formData.get("isActive") === "on";
-
-		if (!serviceId || !title || !description || !price) {
-			return fail(400, { error: "Please fill in all required fields" });
-		}
-
-		try {
-			const [updatedService] = await db
-				.update(services)
-				.set({
-					title,
-					description,
-					price,
-					category: category || null,
-					isActive,
-					updatedAt: new Date(),
-				})
-				.where(and(eq(services.id, serviceId), eq(services.userId, session.user.id)))
-				.returning();
-
-			if (!updatedService) {
-				return fail(404, { error: "Service not found" });
-			}
-
-			// Create notification with new clean API
-			// await notification.success(
-			// 	"Service Updated",
-			// 	`Your service "${title}" has been successfully updated.`,
-			// 	{ userId: session.user.id }
-			// );
-
-			return { success: true, action: "update", service: updatedService };
-		} catch (error) {
-			console.error("Error updating service:", error);
-			return fail(500, { error: "Failed to update service" });
-		}
-	},
-
-	delete: async ({ request }) => {
-		const session = await auth.api.getSession({
-			headers: request.headers,
-		});
-
-		if (!session) {
-			return fail(401, { error: "Unauthorized" });
-		}
-
+		const session = await getAuthenticatedSession(request);
 		const formData = await request.formData();
 		const serviceId = formData.get("serviceId")?.toString();
 
@@ -150,26 +93,54 @@ export const actions = {
 		}
 
 		try {
-			const [deletedService] = await db
-				.delete(services)
-				.where(and(eq(services.id, serviceId), eq(services.userId, session.user.id)))
-				.returning();
+			const serviceData = extractServiceData(formData);
 
-			if (!deletedService) {
+			const updatedService = await handleDbOperation(
+				() =>
+					db
+						.update(services)
+						.set({ ...serviceData, updatedAt: new Date() })
+						.where(and(eq(services.id, serviceId), eq(services.userId, session.user.id)))
+						.returning(),
+				"Failed to update service"
+			);
+
+			if (!updatedService[0]) {
 				return fail(404, { error: "Service not found" });
 			}
 
-			// Create notification with new clean API
-			// await notification.info(
-			// 	"Service Deleted",
-			// 	`The service "${deletedService.title}" has been removed from your portfolio.`,
-			// 	{ userId: session.user.id }
-			// );
+			return { success: true, action: "update", service: updatedService[0] };
+		} catch (error) {
+			return fail(error.message.includes("required fields") ? 400 : 500, { error: error.message });
+		}
+	},
+
+	delete: async ({ request }) => {
+		const session = await getAuthenticatedSession(request);
+		const formData = await request.formData();
+		const serviceId = formData.get("serviceId")?.toString();
+
+		if (!serviceId) {
+			return fail(400, { error: "Service ID is required" });
+		}
+
+		try {
+			const deletedService = await handleDbOperation(
+				() =>
+					db
+						.delete(services)
+						.where(and(eq(services.id, serviceId), eq(services.userId, session.user.id)))
+						.returning(),
+				"Failed to delete service"
+			);
+
+			if (!deletedService[0]) {
+				return fail(404, { error: "Service not found" });
+			}
 
 			return { success: true, action: "delete" };
 		} catch (error) {
-			console.error("Error deleting service:", error);
-			return fail(500, { error: "Failed to delete service" });
+			return fail(500, { error: error.message });
 		}
 	},
 };

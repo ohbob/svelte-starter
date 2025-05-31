@@ -1,6 +1,6 @@
 import { trackPageView } from "$lib/server/analytics";
 import { db } from "$lib/server/db";
-import { services, user } from "$lib/server/schema";
+import { meetingTypes, services, user } from "$lib/server/schema";
 import { error } from "@sveltejs/kit";
 import { and, eq, or } from "drizzle-orm";
 import type { PageServerLoad } from "./$types";
@@ -35,6 +35,13 @@ export const load: PageServerLoad = async ({ params, request }) => {
 		.where(and(eq(services.userId, userData.id), eq(services.isActive, true)))
 		.orderBy(services.createdAt);
 
+	// Get user's active meeting types
+	const userMeetingTypes = await db
+		.select()
+		.from(meetingTypes)
+		.where(and(eq(meetingTypes.userId, userData.id), eq(meetingTypes.isActive, true)))
+		.orderBy(meetingTypes.createdAt);
+
 	return {
 		user: {
 			id: userData.id,
@@ -44,5 +51,6 @@ export const load: PageServerLoad = async ({ params, request }) => {
 			customUrl: userData.customUrl,
 		},
 		services: userServices,
+		meetingTypes: userMeetingTypes,
 	};
 };

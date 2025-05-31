@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+you are using bun for everything, bunx, bun install and so on! dont use npm, npx, pnpm and yarn!!!!

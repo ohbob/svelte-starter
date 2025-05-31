@@ -57,6 +57,13 @@
       "when": 1748653799061,
       "tag": "0007_short_garia",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1748726294666,
+      "tag": "0008_cheerful_mastermind",
+      "breakpoints": true
     }
   ]
 }
