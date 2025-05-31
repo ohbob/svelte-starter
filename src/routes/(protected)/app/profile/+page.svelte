@@ -2,6 +2,7 @@
 	import { Button } from "$lib/components/ui/button";
 	import { enhance } from "$app/forms";
 	import { goto } from "$app/navigation";
+	import { showSuccess, showError, toastMessages } from "$lib/utils/toast";
 
 	let { data, form } = $props();
 
@@ -13,6 +14,15 @@
 		isLoading = true;
 	};
 
+	// Show toast notifications based on form results
+	$effect(() => {
+		if (form?.success) {
+			showSuccess(toastMessages.profileUpdated);
+		} else if (form?.error) {
+			showError(form.error);
+		}
+	});
+
 	// Reset loading state after form submission
 	$effect(() => {
 		if (form) {
@@ -22,19 +32,6 @@
 </script>
 
 <div class="p-6">
-	<!-- Status Messages -->
-	{#if form?.error}
-		<div class="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-			{form.error}
-		</div>
-	{/if}
-
-	{#if form?.success}
-		<div class="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
-			Profile updated successfully!
-		</div>
-	{/if}
-
 	<!-- Profile Settings -->
 	<div class="grid gap-6 lg:grid-cols-2">
 		<!-- Portfolio Settings -->
@@ -55,10 +52,13 @@
 					class="space-y-4"
 				>
 					<div>
-						<label class="mb-2 block text-sm font-medium text-gray-700">Custom URL *</label>
+						<label for="custom-url" class="mb-2 block text-sm font-medium text-gray-700"
+							>Custom URL *</label
+						>
 						<div class="flex items-center gap-2">
 							<span class="text-sm text-gray-500">yoursite.com/u/</span>
 							<input
+								id="custom-url"
 								name="customUrl"
 								bind:value={customUrl}
 								type="text"
@@ -75,8 +75,11 @@
 					</div>
 
 					<div>
-						<label class="mb-2 block text-sm font-medium text-gray-700">Contact Email</label>
+						<label for="contact-email" class="mb-2 block text-sm font-medium text-gray-700"
+							>Contact Email</label
+						>
 						<input
+							id="contact-email"
 							name="contactEmail"
 							bind:value={contactEmail}
 							type="email"

@@ -1,5 +1,6 @@
 import { auth } from "$lib/server/auth";
 import { db } from "$lib/server/db";
+import { notification } from "$lib/server/notifications";
 import { services, user } from "$lib/server/schema";
 import { fail, redirect } from "@sveltejs/kit";
 import { and, eq } from "drizzle-orm";
@@ -66,6 +67,13 @@ export const actions = {
 				})
 				.returning();
 
+			// Create notification with new clean API
+			await notification.success(
+				"Service Created",
+				`Your new service "${title}" has been added to your portfolio and is now live.`,
+				{ userId: session.user.id }
+			);
+
 			return { success: true, action: "create", service: newService };
 		} catch (error) {
 			console.error("Error creating service:", error);
@@ -112,6 +120,13 @@ export const actions = {
 				return fail(404, { error: "Service not found" });
 			}
 
+			// Create notification with new clean API
+			await notification.success(
+				"Service Updated",
+				`Your service "${title}" has been successfully updated.`,
+				{ userId: session.user.id }
+			);
+
 			return { success: true, action: "update", service: updatedService };
 		} catch (error) {
 			console.error("Error updating service:", error);
@@ -144,6 +159,13 @@ export const actions = {
 			if (!deletedService) {
 				return fail(404, { error: "Service not found" });
 			}
+
+			// Create notification with new clean API
+			await notification.info(
+				"Service Deleted",
+				`The service "${deletedService.title}" has been removed from your portfolio.`,
+				{ userId: session.user.id }
+			);
 
 			return { success: true, action: "delete" };
 		} catch (error) {
