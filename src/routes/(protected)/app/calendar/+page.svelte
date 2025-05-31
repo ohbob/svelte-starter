@@ -298,7 +298,7 @@
 	}
 </script>
 
-<div class="container mx-auto max-w-6xl p-6">
+<div class="p-6">
 	<div class="mb-8">
 		<h1 class="text-3xl font-bold text-gray-900">Calendar & Scheduling</h1>
 		<p class="mt-2 text-gray-600">
@@ -313,10 +313,10 @@
 	{:else}
 		<!-- Calendar Connection Status -->
 		<div class="mb-6 rounded-lg border bg-white p-6 shadow-sm">
-			<div class="flex items-center justify-between">
-				<div>
+			<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+				<div class="min-w-0 flex-1">
 					<h2 class="text-xl font-semibold text-gray-900">Google Calendar</h2>
-					<p class="mt-1 text-gray-600">
+					<p class="mt-1 break-words text-gray-600">
 						{#if isCalendarConnected && calendarIntegration}
 							Connected to: <span class="font-medium"
 								>{calendarIntegration.selectedCalendarName ||
@@ -329,7 +329,7 @@
 						{/if}
 					</p>
 				</div>
-				<div class="flex items-center gap-3">
+				<div class="flex flex-col gap-3 sm:flex-row sm:items-center">
 					{#if isCalendarConnected}
 						<div class="flex items-center text-green-600">
 							<svg class="mr-2 h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
@@ -341,16 +341,25 @@
 							</svg>
 							Connected
 						</div>
-						<Button onclick={handleShowCalendarSelector} variant="outline">Change Calendar</Button>
-						<Button
-							onclick={disconnectCalendar}
-							variant="outline"
-							class="text-red-600 hover:text-red-700"
-						>
-							Disconnect
-						</Button>
+						<div class="flex flex-col gap-2 sm:flex-row">
+							<Button
+								onclick={handleShowCalendarSelector}
+								variant="outline"
+								class="w-full sm:w-auto">Change Calendar</Button
+							>
+							<Button
+								onclick={disconnectCalendar}
+								variant="outline"
+								class="w-full text-red-600 hover:text-red-700 sm:w-auto"
+							>
+								Disconnect
+							</Button>
+						</div>
 					{:else}
-						<Button onclick={connectCalendar} class="bg-blue-600 hover:bg-blue-700">
+						<Button
+							onclick={connectCalendar}
+							class="w-full bg-blue-600 hover:bg-blue-700 sm:w-auto"
+						>
 							Connect Google Calendar
 						</Button>
 					{/if}
