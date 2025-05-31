@@ -3,7 +3,7 @@ import { CalendarManager } from "$lib/server/calendar";
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 
-export const GET: RequestHandler = async ({ request }) => {
+export const GET: RequestHandler = async ({ request, url }) => {
 	const session = await auth.api.getSession({ headers: request.headers });
 
 	if (!session?.user?.id) {
@@ -22,8 +22,13 @@ export const GET: RequestHandler = async ({ request }) => {
 			});
 		}
 
-		// Get available calendars
-		const availableCalendars = await calendarManager.getAvailableCalendars(session.user.id);
+		// Only fetch available calendars if explicitly requested
+		const includeCalendars = url.searchParams.get("includeCalendars") === "true";
+		let availableCalendars = [];
+
+		if (includeCalendars) {
+			availableCalendars = await calendarManager.getAvailableCalendars(session.user.id);
+		}
 
 		return json({
 			isConnected: true,

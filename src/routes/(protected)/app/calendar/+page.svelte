@@ -12,6 +12,7 @@
 	let calendarIntegration = $state(null);
 	let availableCalendars = $state([]);
 	let showCalendarSelector = $state(false);
+	let loadingCalendars = $state(false);
 
 	// Meeting type form
 	let showMeetingTypeForm = $state(false);
@@ -88,7 +89,7 @@
 				const data = await calendarStatusRes.json();
 				isCalendarConnected = data.isConnected;
 				calendarIntegration = data.integration;
-				availableCalendars = data.availableCalendars || [];
+				availableCalendars = [];
 			}
 		} catch (error) {
 			console.error("Error loading data:", error);
@@ -159,6 +160,26 @@
 
 	function handleShowCalendarSelector() {
 		showCalendarSelector = true;
+		// Load available calendars when user wants to change calendar
+		loadAvailableCalendars();
+	}
+
+	async function loadAvailableCalendars() {
+		loadingCalendars = true;
+		try {
+			const response = await fetch("/api/calendar/calendars");
+			if (response.ok) {
+				const data = await response.json();
+				availableCalendars = data.availableCalendars || [];
+			} else {
+				toast.error("Failed to load available calendars");
+			}
+		} catch (error) {
+			console.error("Error loading available calendars:", error);
+			toast.error("Failed to load available calendars");
+		} finally {
+			loadingCalendars = false;
+		}
 	}
 
 	function handleCalendarSelectorCancel() {
@@ -320,11 +341,7 @@
 							</svg>
 							Connected
 						</div>
-						{#if availableCalendars.length > 1}
-							<Button onclick={handleShowCalendarSelector} variant="outline">
-								Change Calendar
-							</Button>
-						{/if}
+						<Button onclick={handleShowCalendarSelector} variant="outline">Change Calendar</Button>
 						<Button
 							onclick={disconnectCalendar}
 							variant="outline"
@@ -595,33 +612,47 @@
 			<h3 class="mb-4 text-lg font-semibold text-gray-900">Select Calendar</h3>
 			<p class="mb-4 text-gray-600">Choose which calendar to use for your bookings:</p>
 
-			<div class="max-h-60 space-y-2 overflow-y-auto">
-				{#each availableCalendars as calendar}
-					<button
-						onclick={handleCalendarSelect}
-						data-calendar-id={calendar.id}
-						class="w-full rounded-lg border border-gray-200 p-3 text-left transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-						class:bg-blue-50={calendarIntegration?.selectedCalendarId === calendar.id}
-						class:border-blue-200={calendarIntegration?.selectedCalendarId === calendar.id}
-					>
-						<div class="font-medium text-gray-900">{calendar.summary}</div>
-						{#if calendar.description}
-							<div class="text-sm text-gray-600">{calendar.description}</div>
-						{/if}
-						<div class="mt-1 text-xs text-gray-500">
-							{calendar.id}
-							{#if calendar.primary}
-								<span class="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-blue-800">Primary</span>
+			{#if loadingCalendars}
+				<div class="flex items-center justify-center py-8">
+					<div class="h-6 w-6 animate-spin rounded-full border-b-2 border-blue-600"></div>
+					<span class="ml-2 text-gray-600">Loading calendars...</span>
+				</div>
+			{:else if availableCalendars.length === 0}
+				<div class="py-8 text-center text-gray-500">
+					<p>No calendars found</p>
+					<p class="text-sm">Make sure you have calendars in your Google account</p>
+				</div>
+			{:else}
+				<div class="max-h-60 space-y-2 overflow-y-auto">
+					{#each availableCalendars as calendar}
+						<button
+							onclick={handleCalendarSelect}
+							data-calendar-id={calendar.id}
+							class="w-full rounded-lg border border-gray-200 p-3 text-left transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class:bg-blue-50={calendarIntegration?.selectedCalendarId === calendar.id}
+							class:border-blue-200={calendarIntegration?.selectedCalendarId === calendar.id}
+						>
+							<div class="font-medium text-gray-900">{calendar.summary}</div>
+							{#if calendar.description}
+								<div class="text-sm text-gray-600">{calendar.description}</div>
 							{/if}
-							{#if calendarIntegration?.selectedCalendarId === calendar.id}
-								<span class="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-green-800"
-									>Selected</span
-								>
-							{/if}
-						</div>
-					</button>
-				{/each}
-			</div>
+							<div class="mt-1 text-xs text-gray-500">
+								{calendar.id}
+								{#if calendar.primary}
+									<span class="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-blue-800"
+										>Primary</span
+									>
+								{/if}
+								{#if calendarIntegration?.selectedCalendarId === calendar.id}
+									<span class="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-green-800"
+										>Selected</span
+									>
+								{/if}
+							</div>
+						</button>
+					{/each}
+				</div>
+			{/if}
 
 			<div class="mt-4 flex justify-end gap-3 border-t pt-4">
 				<Button type="button" variant="outline" onclick={handleCalendarSelectorCancel}>
