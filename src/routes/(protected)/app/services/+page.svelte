@@ -91,7 +91,7 @@
 		}
 
 		// Show immediate feedback
-		toast.info("Deleting service...");
+		// toast.info("Deleting service...");
 
 		// Submit the hidden delete form
 		const deleteForm = document.getElementById(`delete-form-${serviceId}`);
