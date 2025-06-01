@@ -64,6 +64,20 @@
       "when": 1748726294666,
       "tag": "0008_cheerful_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1748744226374,
+      "tag": "0009_light_madame_web",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1748744542896,
+      "tag": "0010_peaceful_falcon",
+      "breakpoints": true
     }
   ]
 }

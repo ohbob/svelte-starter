@@ -24,6 +24,7 @@
 
 	const navigation = [
 		{ name: "Dashboard", href: "/app", icon: "dashboard", shortName: "Home" },
+		{ name: "Company", href: "/app/company", icon: "company", shortName: "Company" },
 		{ name: "Website", href: "/app/website/services", icon: "website", shortName: "Website" },
 		{ name: "Calendar", href: "/app/calendar", icon: "calendar", shortName: "Calendar" },
 		{ name: "Analytics", href: "/app/analytics", icon: "analytics", shortName: "Analytics" },
@@ -42,6 +43,7 @@
 
 	const getPageTitle = () => {
 		if ($page.url.pathname === "/app") return "Dashboard";
+		if ($page.url.pathname.startsWith("/app/company")) return "Company";
 		if ($page.url.pathname.startsWith("/app/website")) return "Website";
 		if ($page.url.pathname.startsWith("/app/calendar")) return "Calendar";
 		if ($page.url.pathname.startsWith("/app/analytics")) return "Analytics";
@@ -91,6 +93,15 @@
 								stroke-linejoin="round"
 								stroke-width="2"
 								d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6a2 2 0 01-2 2H10a2 2 0 01-2-2V5z"
+							></path>
+						</svg>
+					{:else if item.icon === "company"}
+						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
 							></path>
 						</svg>
 					{:else if item.icon === "website"}
@@ -266,6 +277,15 @@
 								stroke-linejoin="round"
 								stroke-width="2"
 								d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6a2 2 0 01-2 2H10a2 2 0 01-2-2V5z"
+							></path>
+						</svg>
+					{:else if item.icon === "company"}
+						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
 							></path>
 						</svg>
 					{:else if item.icon === "website"}
