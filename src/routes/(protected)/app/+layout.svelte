@@ -24,7 +24,7 @@
 
 	const navigation = [
 		{ name: "Dashboard", href: "/app", icon: "dashboard", shortName: "Home" },
-		{ name: "Services", href: "/app/services", icon: "services", shortName: "Services" },
+		{ name: "Website", href: "/app/website/services", icon: "website", shortName: "Website" },
 		{ name: "Calendar", href: "/app/calendar", icon: "calendar", shortName: "Calendar" },
 		{ name: "Analytics", href: "/app/analytics", icon: "analytics", shortName: "Analytics" },
 		{ name: "Profile", href: "/app/profile", icon: "profile", shortName: "Profile" },
@@ -34,12 +34,15 @@
 		if (href === "/app") {
 			return $page.url.pathname === "/app";
 		}
+		if (href === "/app/website/services") {
+			return $page.url.pathname.startsWith("/app/website");
+		}
 		return $page.url.pathname.startsWith(href);
 	};
 
 	const getPageTitle = () => {
 		if ($page.url.pathname === "/app") return "Dashboard";
-		if ($page.url.pathname.startsWith("/app/services")) return "Services";
+		if ($page.url.pathname.startsWith("/app/website")) return "Website";
 		if ($page.url.pathname.startsWith("/app/calendar")) return "Calendar";
 		if ($page.url.pathname.startsWith("/app/analytics")) return "Analytics";
 		if ($page.url.pathname.startsWith("/app/notifications")) return "Notifications";
@@ -90,7 +93,7 @@
 								d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6a2 2 0 01-2 2H10a2 2 0 01-2-2V5z"
 							></path>
 						</svg>
-					{:else if item.icon === "services"}
+					{:else if item.icon === "website"}
 						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
 								stroke-linecap="round"
@@ -122,6 +125,25 @@
 				</a>
 			{/each}
 		</nav>
+
+		<!-- View Public Profile Button -->
+		<div class="border-t border-gray-200 p-4">
+			<a
+				href="/u/{data.user.customUrl || data.user.name || data.user.id}"
+				target="_blank"
+				class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+			>
+				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+					></path>
+				</svg>
+				View Public Page
+			</a>
+		</div>
 
 		<!-- Desktop Profile Section - Removed from sidebar -->
 	</div>
@@ -246,7 +268,7 @@
 								d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6a2 2 0 01-2 2H10a2 2 0 01-2-2V5z"
 							></path>
 						</svg>
-					{:else if item.icon === "services"}
+					{:else if item.icon === "website"}
 						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
 								stroke-linecap="round"
@@ -292,7 +314,15 @@
 
 <!-- Profile Menu Overlay (shared by both desktop and mobile) -->
 {#if showMobileMenu}
-	<div class="fixed inset-0 z-50 bg-black bg-opacity-50" onclick={closeMobileMenu}>
+	<div
+		class="fixed inset-0 z-50 bg-black bg-opacity-50"
+		onclick={closeMobileMenu}
+		onkeydown={(e) => e.key === "Escape" && closeMobileMenu()}
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="profile-menu-title"
+		tabindex="-1"
+	>
 		<div class="absolute right-0 top-0 h-full w-80 max-w-[90vw] bg-white shadow-xl">
 			<div class="border-b border-gray-200 p-4">
 				<div class="flex items-center justify-between">
@@ -304,7 +334,7 @@
 							size="md"
 						/>
 						<div>
-							<div class="font-medium text-gray-900">
+							<div id="profile-menu-title" class="font-medium text-gray-900">
 								{data.user.name || "User"}
 							</div>
 							<div class="text-sm text-gray-500">
@@ -312,7 +342,11 @@
 							</div>
 						</div>
 					</div>
-					<button onclick={closeMobileMenu} class="rounded-lg p-2 hover:bg-gray-100">
+					<button
+						onclick={closeMobileMenu}
+						class="rounded-lg p-2 hover:bg-gray-100"
+						aria-label="Close profile menu"
+					>
 						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
 								stroke-linecap="round"

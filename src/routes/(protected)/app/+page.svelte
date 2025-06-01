@@ -1,6 +1,9 @@
 <script lang="ts">
 	let { data } = $props();
 
+	// Debug log to see what analytics data we're getting
+	console.log("Analytics data:", data.analytics);
+
 	// Prepare chart data
 	const chartData = data.analytics.dailyViews.map((item) => ({
 		date: new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
@@ -14,55 +17,11 @@
 <div class="p-6">
 	<!-- Dashboard Stats -->
 	<div class="mb-6 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+		<!-- Today's Views -->
 		<div class="rounded-lg border border-gray-200 bg-white p-6">
 			<div class="flex items-center">
 				<div class="flex-shrink-0">
 					<svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-						/>
-					</svg>
-				</div>
-				<div class="ml-4">
-					<div class="text-sm font-medium text-gray-500">Total Services</div>
-					<div class="text-2xl font-bold text-gray-900">{data.services?.length || 0}</div>
-				</div>
-			</div>
-		</div>
-
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
-			<div class="flex items-center">
-				<div class="flex-shrink-0">
-					<svg class="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-						/>
-					</svg>
-				</div>
-				<div class="ml-4">
-					<div class="text-sm font-medium text-gray-500">Active Services</div>
-					<div class="text-2xl font-bold text-gray-900">
-						{data.services?.filter((s) => s.isActive).length || 0}
-					</div>
-				</div>
-			</div>
-		</div>
-
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
-			<div class="flex items-center">
-				<div class="flex-shrink-0">
-					<svg
-						class="h-8 w-8 text-purple-600"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-					>
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
@@ -78,12 +37,63 @@
 					</svg>
 				</div>
 				<div class="ml-4">
-					<div class="text-sm font-medium text-gray-500">Total Views</div>
-					<div class="text-2xl font-bold text-gray-900">{data.analytics.totalViews}</div>
+					<div class="text-sm font-medium text-gray-500">Today's Views</div>
+					<div class="text-2xl font-bold text-gray-900">
+						{data.analytics.todayViews ?? 0}
+						{#if data.analytics.todayViews === 0}
+							<span class="ml-1 text-xs text-gray-400">(no views today)</span>
+						{/if}
+					</div>
 				</div>
 			</div>
 		</div>
 
+		<!-- 30-Day Views -->
+		<div class="rounded-lg border border-gray-200 bg-white p-6">
+			<div class="flex items-center">
+				<div class="flex-shrink-0">
+					<svg class="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+						/>
+					</svg>
+				</div>
+				<div class="ml-4">
+					<div class="text-sm font-medium text-gray-500">Views (30 days)</div>
+					<div class="text-2xl font-bold text-gray-900">{data.analytics.recentViews}</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Total Services -->
+		<div class="rounded-lg border border-gray-200 bg-white p-6">
+			<div class="flex items-center">
+				<div class="flex-shrink-0">
+					<svg
+						class="h-8 w-8 text-purple-600"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+						/>
+					</svg>
+				</div>
+				<div class="ml-4">
+					<div class="text-sm font-medium text-gray-500">Total Services</div>
+					<div class="text-2xl font-bold text-gray-900">{data.services?.length || 0}</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Active Services -->
 		<div class="rounded-lg border border-gray-200 bg-white p-6">
 			<div class="flex items-center">
 				<div class="flex-shrink-0">
@@ -97,13 +107,15 @@
 							stroke-linecap="round"
 							stroke-linejoin="round"
 							stroke-width="2"
-							d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+							d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
 						/>
 					</svg>
 				</div>
 				<div class="ml-4">
-					<div class="text-sm font-medium text-gray-500">Views (30 days)</div>
-					<div class="text-2xl font-bold text-gray-900">{data.analytics.recentViews}</div>
+					<div class="text-sm font-medium text-gray-500">Active Services</div>
+					<div class="text-2xl font-bold text-gray-900">
+						{data.services?.filter((s) => s.isActive).length || 0}
+					</div>
 				</div>
 			</div>
 		</div>
@@ -164,7 +176,7 @@
 			</div>
 			<div class="space-y-3 p-6">
 				<a
-					href="/app/services"
+					href="/app/website/services"
 					class="flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-colors hover:border-gray-300"
 				>
 					<div class="flex items-center gap-3">

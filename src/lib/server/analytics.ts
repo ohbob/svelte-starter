@@ -85,11 +85,20 @@ export async function getAnalytics(userId: string, days: number = 30) {
 	startDate.setDate(startDate.getDate() - days);
 	const startDateStr = startDate.toISOString().split("T")[0];
 
+	// Get today's date
+	const today = new Date().toISOString().split("T")[0];
+
 	// Get total views (all time)
 	const totalViewsResult = await db
 		.select({ total: sql<number>`sum(views)` })
 		.from(dailyAnalytics)
 		.where(eq(dailyAnalytics.userId, userId));
+
+	// Get today's views
+	const todayViewsResult = await db
+		.select({ total: sql<number>`sum(views)` })
+		.from(dailyAnalytics)
+		.where(and(eq(dailyAnalytics.userId, userId), eq(dailyAnalytics.date, today)));
 
 	// Get recent views (last X days)
 	const recentViewsResult = await db
@@ -120,11 +129,31 @@ export async function getAnalytics(userId: string, days: number = 30) {
 		.orderBy(desc(sql`sum(views)`))
 		.limit(10);
 
+	// Get today's top referrers
+	const todayReferrers = await db
+		.select({
+			domain: referrerAnalytics.domain,
+			path: referrerAnalytics.path,
+			views: sql<number>`sum(views)`,
+		})
+		.from(referrerAnalytics)
+		.where(and(eq(referrerAnalytics.userId, userId), eq(referrerAnalytics.date, today)))
+		.groupBy(referrerAnalytics.domain, referrerAnalytics.path)
+		.orderBy(desc(sql`sum(views)`))
+		.limit(5);
+
 	return {
 		totalViews: totalViewsResult[0]?.total || 0,
+		todayViews: todayViewsResult[0]?.total || 0,
 		recentViews: recentViewsResult[0]?.total || 0,
 		dailyViews,
 		topReferrers: topReferrers.map((r) => ({
+			referrer: r.domain + (r.path || ""),
+			domain: r.domain,
+			path: r.path,
+			views: r.views,
+		})),
+		todayReferrers: todayReferrers.map((r) => ({
 			referrer: r.domain + (r.path || ""),
 			domain: r.domain,
 			path: r.path,
