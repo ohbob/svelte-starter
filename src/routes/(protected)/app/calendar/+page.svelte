@@ -16,6 +16,7 @@
 
 	// Meeting type form
 	let showMeetingTypeForm = $state(false);
+	let editingMeetingType = $state(null); // Track which meeting type we're editing
 	let meetingTypeForm = $state({
 		name: "",
 		description: "",
@@ -204,15 +205,93 @@
 				meetingTypes = [...meetingTypes, data.meetingType];
 				showMeetingTypeForm = false;
 				resetMeetingTypeForm();
-				toast.success("Meeting type created successfully!");
+				toast.success("Meeting created successfully!");
 			} else {
 				const error = await response.json();
-				toast.error(error.error || "Failed to create meeting type");
+				toast.error(error.error || "Failed to create meeting");
 			}
 		} catch (error) {
-			console.error("Error creating meeting type:", error);
-			toast.error("Failed to create meeting type");
+			console.error("Error creating meeting:", error);
+			toast.error("Failed to create meeting");
 		}
+	}
+
+	function editMeetingType(meetingType) {
+		editingMeetingType = meetingType;
+		meetingTypeForm = {
+			name: meetingType.name,
+			description: meetingType.description || "",
+			duration: meetingType.duration,
+			price: meetingType.price,
+			color: meetingType.color,
+			requiresConfirmation: meetingType.requiresConfirmation,
+			bufferTimeBefore: meetingType.bufferTimeBefore || 0,
+			bufferTimeAfter: meetingType.bufferTimeAfter || 0,
+		};
+		showMeetingTypeForm = true;
+	}
+
+	async function updateMeetingType() {
+		try {
+			const response = await fetch(`/api/scheduling/meeting-types/${editingMeetingType.id}`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(meetingTypeForm),
+			});
+
+			if (response.ok) {
+				const data = await response.json();
+				meetingTypes = meetingTypes.map((mt) =>
+					mt.id === editingMeetingType.id ? data.meetingType : mt
+				);
+				showMeetingTypeForm = false;
+				resetMeetingTypeForm();
+				toast.success("Meeting updated successfully!");
+			} else {
+				const error = await response.json();
+				toast.error(error.error || "Failed to update meeting");
+			}
+		} catch (error) {
+			console.error("Error updating meeting:", error);
+			toast.error("Failed to update meeting");
+		}
+	}
+
+	async function deleteMeetingType(meetingType) {
+		if (!confirm(`Are you sure you want to delete "${meetingType.name}"?`)) {
+			return;
+		}
+
+		try {
+			const response = await fetch(`/api/scheduling/meeting-types/${meetingType.id}`, {
+				method: "DELETE",
+			});
+
+			if (response.ok) {
+				meetingTypes = meetingTypes.filter((mt) => mt.id !== meetingType.id);
+				toast.success("Meeting deleted successfully!");
+			} else {
+				const error = await response.json();
+				toast.error(error.error || "Failed to delete meeting");
+			}
+		} catch (error) {
+			console.error("Error deleting meeting:", error);
+			toast.error("Failed to delete meeting");
+		}
+	}
+
+	function resetMeetingTypeForm() {
+		editingMeetingType = null;
+		meetingTypeForm = {
+			name: "",
+			description: "",
+			duration: 30,
+			price: 0,
+			color: "#3b82f6",
+			requiresConfirmation: false,
+			bufferTimeBefore: 0,
+			bufferTimeAfter: 0,
+		};
 	}
 
 	async function saveAvailability() {
@@ -247,37 +326,16 @@
 
 	function handleMeetingTypeSubmit(event) {
 		event.preventDefault();
-		createMeetingType();
+		if (editingMeetingType) {
+			updateMeetingType();
+		} else {
+			createMeetingType();
+		}
 	}
 
 	function handleAvailabilitySubmit(event) {
 		event.preventDefault();
 		saveAvailability();
-	}
-
-	function resetMeetingTypeForm() {
-		meetingTypeForm = {
-			name: "",
-			description: "",
-			duration: 30,
-			price: 0,
-			color: "#3b82f6",
-			requiresConfirmation: false,
-			bufferTimeBefore: 0,
-			bufferTimeAfter: 0,
-		};
-	}
-
-	function formatDuration(minutes) {
-		if (minutes < 60) return `${minutes}m`;
-		const hours = Math.floor(minutes / 60);
-		const mins = minutes % 60;
-		return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-	}
-
-	function formatPrice(cents) {
-		if (cents === 0) return "Free";
-		return `$${(cents / 100).toFixed(2)}`;
 	}
 
 	function handleMeetingTypeFormCancel() {
@@ -295,6 +353,18 @@
 
 	function handleShowAvailabilityForm() {
 		showAvailabilityForm = true;
+	}
+
+	function formatDuration(minutes) {
+		if (minutes < 60) return `${minutes}m`;
+		const hours = Math.floor(minutes / 60);
+		const mins = minutes % 60;
+		return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+	}
+
+	function formatPrice(cents) {
+		if (cents === 0) return "Free";
+		return `$${(cents / 100).toFixed(2)}`;
 	}
 </script>
 
@@ -367,16 +437,16 @@
 			</div>
 		</div>
 
-		<!-- Meeting Types -->
+		<!-- Meetings -->
 		<div class="mb-6 rounded-lg border bg-white p-6 shadow-sm">
 			<div class="mb-4 flex items-center justify-between">
-				<h2 class="text-xl font-semibold text-gray-900">Meeting Types</h2>
+				<h2 class="text-xl font-semibold text-gray-900">Meetings</h2>
 				<Button
 					onclick={handleShowMeetingTypeForm}
 					disabled={!isCalendarConnected}
 					class="bg-blue-600 hover:bg-blue-700"
 				>
-					Add Meeting Type
+					Add Meeting
 				</Button>
 			</div>
 
@@ -395,8 +465,8 @@
 							d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
 						></path>
 					</svg>
-					<p>No meeting types created yet</p>
-					<p class="text-sm">Create your first meeting type to start accepting bookings</p>
+					<p>No meetings created yet</p>
+					<p class="text-sm">Create your first meeting to start accepting bookings</p>
 				</div>
 			{:else}
 				<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -410,7 +480,37 @@
 									></div>
 									<h3 class="font-medium text-gray-900">{meetingType.name}</h3>
 								</div>
-								<span class="text-sm text-gray-500">{formatPrice(meetingType.price)}</span>
+								<div class="flex items-center gap-2">
+									<span class="text-sm text-gray-500">{formatPrice(meetingType.price)}</span>
+									<button
+										onclick={(e) => editMeetingType(meetingType)}
+										class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+										title="Edit meeting"
+									>
+										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+											></path>
+										</svg>
+									</button>
+									<button
+										onclick={(e) => deleteMeetingType(meetingType)}
+										class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600"
+										title="Delete meeting"
+									>
+										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+											></path>
+										</svg>
+									</button>
+								</div>
 							</div>
 							{#if meetingType.description}
 								<p class="mb-3 text-sm text-gray-600">{meetingType.description}</p>
@@ -480,7 +580,9 @@
 {#if showMeetingTypeForm}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
 		<div class="w-full max-w-md rounded-lg bg-white p-6">
-			<h3 class="mb-4 text-lg font-semibold text-gray-900">Create Meeting Type</h3>
+			<h3 class="mb-4 text-lg font-semibold text-gray-900">
+				{editingMeetingType ? "Edit Meeting" : "Create Meeting"}
+			</h3>
 
 			<form onsubmit={handleMeetingTypeSubmit} class="space-y-4">
 				<div>
@@ -555,7 +657,9 @@
 					<Button type="button" variant="outline" onclick={handleMeetingTypeFormCancel}>
 						Cancel
 					</Button>
-					<Button type="submit" class="bg-blue-600 hover:bg-blue-700">Create Meeting Type</Button>
+					<Button type="submit" class="bg-blue-600 hover:bg-blue-700">
+						{editingMeetingType ? "Update Meeting" : "Create Meeting"}
+					</Button>
 				</div>
 			</form>
 		</div>
