@@ -1,17 +1,10 @@
 <script lang="ts">
+	import AnalyticsHistogram from "$lib/components/AnalyticsHistogram.svelte";
+
 	let { data } = $props();
 
-	// Debug log to see what analytics data we're getting
-	console.log("Analytics data:", data.analytics);
-
-	// Prepare chart data
-	const chartData = data.analytics.dailyViews.map((item) => ({
-		date: new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-		views: item.views,
-	}));
-
-	// Get max views for chart scaling
-	const maxViews = Math.max(...chartData.map((d) => d.views), 1);
+	// Ensure we have valid analytics data
+	const analyticsData = data.analytics || {};
 </script>
 
 <div class="p-6">
@@ -39,8 +32,8 @@
 				<div class="ml-4">
 					<div class="text-sm font-medium text-gray-500">Today's Views</div>
 					<div class="text-2xl font-bold text-gray-900">
-						{data.analytics.todayViews ?? 0}
-						{#if data.analytics.todayViews === 0}
+						{analyticsData.todayViews ?? 0}
+						{#if analyticsData.todayViews === 0}
 							<span class="ml-1 text-xs text-gray-400">(no views today)</span>
 						{/if}
 					</div>
@@ -63,7 +56,7 @@
 				</div>
 				<div class="ml-4">
 					<div class="text-sm font-medium text-gray-500">Views (30 days)</div>
-					<div class="text-2xl font-bold text-gray-900">{data.analytics.recentViews}</div>
+					<div class="text-2xl font-bold text-gray-900">{analyticsData.recentViews ?? 0}</div>
 				</div>
 			</div>
 		</div>
@@ -123,49 +116,12 @@
 
 	<!-- Analytics and Quick Actions -->
 	<div class="grid gap-6 lg:grid-cols-3">
-		<!-- Views Chart -->
-		<div class="overflow-hidden rounded-lg border border-gray-200 bg-white lg:col-span-2">
-			<div class="border-b border-gray-200 px-6 py-4">
-				<h2 class="text-lg font-semibold text-gray-900">Daily Views (Last 30 Days)</h2>
-			</div>
-			<div class="p-6">
-				{#if chartData.length > 0}
-					<div class="space-y-3">
-						{#each chartData as day}
-							<div class="flex items-center gap-3">
-								<div class="w-16 font-mono text-xs text-gray-500">{day.date}</div>
-								<div class="flex flex-1 items-center gap-2">
-									<div class="relative h-2 flex-1 overflow-hidden rounded-full bg-gray-100">
-										<div
-											class="h-full rounded-full bg-blue-500 transition-all duration-300"
-											style:width="{(day.views / maxViews) * 100}%"
-										></div>
-									</div>
-									<div class="w-8 text-right text-xs font-medium text-gray-700">{day.views}</div>
-								</div>
-							</div>
-						{/each}
-					</div>
-				{:else}
-					<div class="py-8 text-center">
-						<svg
-							class="mx-auto mb-4 h-12 w-12 text-gray-400"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-							/>
-						</svg>
-						<h3 class="mb-2 text-lg font-medium text-gray-900">No views yet</h3>
-						<p class="text-sm text-gray-500">Share your portfolio to start getting views!</p>
-					</div>
-				{/if}
-			</div>
+		<!-- Analytics Histogram -->
+		<div class="lg:col-span-2">
+			<AnalyticsHistogram
+				dailyViews={analyticsData.dailyViews || []}
+				topReferrers={analyticsData.topReferrers || []}
+			/>
 		</div>
 
 		<!-- Quick Actions -->
