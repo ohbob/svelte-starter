@@ -5,7 +5,6 @@
 	import { authClient } from "$lib/auth-client";
 	import { page } from "$app/stores";
 	import NotificationCenter from "$lib/components/NotificationCenter.svelte";
-	import { onMount } from "svelte";
 	import { browser } from "$app/environment";
 	import CompanySelector from "$lib/components/ui/company-selector.svelte";
 
@@ -13,7 +12,7 @@
 	let showMobileMenu = $state(false);
 
 	// Sync localStorage with server-side cookie for company selection
-	onMount(() => {
+	$effect(() => {
 		if (browser) {
 			const selectedCompanyId = localStorage.getItem("selectedCompanyId");
 			if (selectedCompanyId) {

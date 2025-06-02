@@ -11,131 +11,106 @@ function isValidSlug(slug: string): boolean {
 	return slugRegex.test(slug) && slug.length >= 3 && slug.length <= 50;
 }
 
-export const load: PageServerLoad = async ({ parent }) => {
-	// Get data from parent layout
-	const { currentCompany } = await parent();
+export const load: PageServerLoad = async ({ request, cookies }) => {
+	const session = await auth.api.getSession({ headers: request.headers });
+
+	if (!session?.user?.id) {
+		throw redirect(302, "/signin");
+	}
+
+	const selectedCompanyId = cookies.get("selectedCompanyId");
+
+	if (!selectedCompanyId) {
+		throw redirect(302, "/app");
+	}
+
+	// Get the current company
+	const company = await db
+		.select()
+		.from(companies)
+		.where(and(eq(companies.id, selectedCompanyId), eq(companies.userId, session.user.id)))
+		.limit(1);
+
+	if (!company.length) {
+		throw redirect(302, "/app");
+	}
+
 	return {
-		currentCompany,
+		company: company[0],
 	};
 };
 
 export const actions: Actions = {
-	default: async ({ request, cookies }) => {
-		console.log("🔄 Form action triggered");
-
-		// Get session
+	updateCompany: async ({ request, cookies }) => {
 		const session = await auth.api.getSession({ headers: request.headers });
-		if (!session) {
-			console.log("❌ Unauthorized request");
-			throw redirect(302, "/signin");
+
+		if (!session?.user?.id) {
+			return fail(401, { error: "Unauthorized" });
 		}
 
-		console.log("✅ User authenticated:", session.user.email);
+		const selectedCompanyId = cookies.get("selectedCompanyId");
+
+		if (!selectedCompanyId) {
+			return fail(400, { error: "No company selected" });
+		}
 
 		try {
 			const formData = await request.formData();
-			const data = {
-				name: formData.get("name")?.toString().trim(),
-				slug: formData.get("slug")?.toString().trim(),
-				email: formData.get("email")?.toString().trim() || null,
-				phone: formData.get("phone")?.toString().trim() || null,
-				vat: formData.get("vat")?.toString().trim() || null,
-				regNr: formData.get("regNr")?.toString().trim() || null,
-				description: formData.get("description")?.toString().trim() || null,
-			};
+			const field = formData.get("field") as string;
+			const value = formData.get("value") as string;
 
-			console.log("📝 Form data received:", data);
-
-			// Get current company ID from cookie
-			const selectedCompanyId = cookies.get("selectedCompanyId");
-			if (!selectedCompanyId) {
-				return fail(400, { error: "No company selected" });
+			if (!field) {
+				return fail(400, { error: "Field is required" });
 			}
 
-			// Verify the company belongs to the user
-			const existingCompany = await db
+			// Verify company ownership
+			const company = await db
 				.select()
 				.from(companies)
 				.where(and(eq(companies.id, selectedCompanyId), eq(companies.userId, session.user.id)))
 				.limit(1);
 
-			if (!existingCompany.length) {
-				console.log("❌ Company not found for user");
+			if (!company.length) {
 				return fail(404, { error: "Company not found" });
 			}
 
-			console.log("✅ Company found:", existingCompany[0].name);
+			// Validate slug if updating slug
+			if (field === "slug" && value) {
+				// Check slug format
+				if (!/^[a-z0-9-]+$/.test(value)) {
+					return fail(400, {
+						error: "Slug can only contain lowercase letters, numbers, and hyphens",
+					});
+				}
 
-			// Validate required fields
-			if (!data.name || data.name.length < 2) {
-				return fail(400, {
-					error: "Company name must be at least 2 characters long.",
-					data,
-				});
+				if (value.length < 2 || value.length > 50) {
+					return fail(400, { error: "Slug must be between 2 and 50 characters" });
+				}
+
+				// Check uniqueness
+				const existingCompany = await db
+					.select()
+					.from(companies)
+					.where(and(eq(companies.slug, value), ne(companies.id, selectedCompanyId)))
+					.limit(1);
+
+				if (existingCompany.length > 0) {
+					return fail(400, { error: "This slug is already taken" });
+				}
 			}
 
-			if (!data.slug) {
-				return fail(400, {
-					error: "Slug is required.",
-					data,
-				});
-			}
-
-			// Validate slug format
-			if (!isValidSlug(data.slug)) {
-				return fail(400, {
-					error:
-						"Invalid slug format. Use only lowercase letters, numbers, and hyphens. Must be 3-50 characters.",
-					data,
-				});
-			}
-
-			console.log("🔍 Validating slug:", data.slug);
-
-			// Check if slug is unique (excluding current company)
-			const slugExists = await db
-				.select()
-				.from(companies)
-				.where(and(eq(companies.slug, data.slug), ne(companies.id, selectedCompanyId)))
-				.limit(1);
-
-			if (slugExists.length) {
-				console.log("❌ Slug already exists");
-				return fail(400, {
-					error: "This slug is already taken. Please choose a different one.",
-					data,
-				});
-			}
-
-			console.log("✅ Slug is valid and unique");
-
-			// Prepare update data
-			const updateData = {
-				...data,
+			// Update the company
+			const updateData: any = {
+				[field]: value,
 				updatedAt: new Date(),
 			};
 
-			console.log("📤 Updating company with data:", updateData);
+			await db.update(companies).set(updateData).where(eq(companies.id, selectedCompanyId));
 
-			// Update company
-			const [updatedCompany] = await db
-				.update(companies)
-				.set(updateData)
-				.where(eq(companies.id, selectedCompanyId))
-				.returning();
-
-			console.log("✅ Company updated successfully:", updatedCompany.name);
-
-			return {
-				success: true,
-				message: "Company updated successfully!",
-				company: updatedCompany,
-			};
+			return { success: true, field, value };
 		} catch (error) {
-			console.error("❌ Error updating company:", error);
-			return fail(500, {
-				error: "Failed to update company. Please try again.",
-			});
+			console.error("Error updating company:", error);
+			return fail(500, { error: "Failed to update company" });
 		}
 	},
 };

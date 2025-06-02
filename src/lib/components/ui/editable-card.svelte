@@ -1,6 +1,8 @@
 <script>
 	import { browser } from "$app/environment";
 	import { toast } from "svelte-sonner";
+	import { enhance } from "$app/forms";
+	import { page } from "$app/stores";
 
 	let {
 		label,
@@ -9,7 +11,6 @@
 		type = "text",
 		icon,
 		iconColor = "blue",
-		companyId,
 		fieldName,
 		rows = undefined,
 		saving = $bindable(false),
@@ -19,26 +20,35 @@
 
 	// Debounce timer
 	let debounceTimer;
+	let formElement;
 
-	// Auto-save function
+	// Auto-save function using form submission
 	const autoSave = async (newValue) => {
-		if (!browser || !companyId) return;
+		if (!browser || !formElement) return;
 
 		saving = true;
 
+		// Create form data and submit
+		const formData = new FormData();
+		formData.append("field", fieldName);
+		formData.append("value", newValue);
+
 		try {
-			const response = await fetch(`/api/companies/${companyId}`, {
-				method: "PUT",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ [fieldName]: newValue }),
+			const response = await fetch("?/updateCompany", {
+				method: "POST",
+				body: formData,
+				headers: {
+					"x-sveltekit-action": "true",
+				},
 			});
 
-			if (response.ok) {
+			const result = await response.json();
+
+			if (result.type === "success") {
 				lastSaved = new Date();
 				toast.success(`${label} updated`);
-			} else {
-				const error = await response.json();
-				toast.error(error.message || "Failed to update");
+			} else if (result.type === "failure") {
+				toast.error(result.data?.error || "Failed to update");
 			}
 		} catch (error) {
 			toast.error("Failed to update");
@@ -78,6 +88,22 @@
 		gray: "bg-gray-100 text-gray-600",
 	};
 </script>
+
+<!-- Hidden form for form actions -->
+<form
+	bind:this={formElement}
+	method="POST"
+	action="?/updateCompany"
+	use:enhance={() => {
+		return async ({ result }) => {
+			// Handle result in autoSave function
+		};
+	}}
+	style="display: none;"
+>
+	<input type="hidden" name="field" value={fieldName} />
+	<input type="hidden" name="value" bind:value />
+</form>
 
 <div class="rounded-lg border border-gray-200 bg-white p-6">
 	<div class="flex items-center justify-between">

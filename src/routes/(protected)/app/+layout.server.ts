@@ -1,77 +1,101 @@
 import { getAnalytics } from "$lib/server/analytics";
 import { auth } from "$lib/server/auth";
-import { db } from "$lib/server/db";
-import { companies, user } from "$lib/server/schema";
 import { redirect } from "@sveltejs/kit";
-import { asc, eq } from "drizzle-orm";
 import type { LayoutServerLoad } from "./$types";
 
-export const load: LayoutServerLoad = async ({ request, cookies }) => {
+export const load: LayoutServerLoad = async ({ request, cookies, parent }) => {
+	console.log("🔄 App layout load triggered");
+
 	try {
-		const session = await auth.api.getSession({
-			headers: request.headers,
-		});
+		// Get data from parent layout first - this ensures consistency
+		const parentData = await parent();
 
-		if (!session) {
+		// If parent doesn't have user data, redirect to signin
+		if (!parentData.user) {
 			throw redirect(302, "/signin");
 		}
 
-		// Fetch complete user data from database including customUrl
-		const userData = await db.select().from(user).where(eq(user.id, session.user.id)).limit(1);
-		const completeUser = userData[0];
+		// Use parent's company data as the source of truth
+		let currentCompany = parentData.selectedCompany;
+		let userCompanies = parentData.companies || [];
 
-		if (!completeUser) {
-			throw redirect(302, "/signin");
+		// If no companies exist, return minimal data
+		if (userCompanies.length === 0) {
+			return {
+				user: parentData.user,
+				companies: [],
+				currentCompany: null,
+				selectedCompanyId: null,
+				analytics: null,
+				todaysViews: 0,
+			};
 		}
 
-		// Get user's companies with proper ordering
-		const userCompanies = await db
-			.select()
-			.from(companies)
-			.where(eq(companies.userId, session.user.id))
-			.orderBy(asc(companies.createdAt));
-
-		// Get selected company ID from cookie
-		const selectedCompanyId = cookies.get("selectedCompanyId");
-
-		// Determine current company
-		let currentCompany = null;
-		if (selectedCompanyId && userCompanies.length > 0) {
-			currentCompany = userCompanies.find((c) => c.id === selectedCompanyId) || userCompanies[0];
-		} else if (userCompanies.length > 0) {
-			// Auto-select the first company if none is selected
+		// Ensure we have a selected company
+		if (!currentCompany && userCompanies.length > 0) {
 			currentCompany = userCompanies[0];
-			// Set the cookie so it persists
+			// Set cookie for consistency
 			cookies.set("selectedCompanyId", currentCompany.id, {
 				path: "/",
 				maxAge: 60 * 60 * 24 * 30, // 30 days
-				httpOnly: false, // Allow client-side access
-				secure: false, // Set to true in production with HTTPS
+				httpOnly: false,
+				secure: false,
 				sameSite: "lax",
 			});
 		}
 
-		// Load analytics data for current company
+		// Load analytics data with error handling
 		let analyticsData = null;
+		let todaysViews = 0;
+
 		if (currentCompany) {
-			analyticsData = await getAnalytics(currentCompany.id);
+			try {
+				analyticsData = await getAnalytics(currentCompany.id);
+			} catch (analyticsError) {
+				console.warn("Failed to load analytics data:", analyticsError);
+				// Continue without analytics data rather than failing completely
+				analyticsData = null;
+			}
 		}
 
 		return {
-			user: completeUser,
+			user: parentData.user,
 			companies: userCompanies,
 			currentCompany,
+			selectedCompanyId: currentCompany?.id || null,
 			analytics: analyticsData,
+			todaysViews,
 		};
 	} catch (error: any) {
-		console.error("Error in layout server load:", error);
+		console.error("Error in app layout server load:", error);
 
 		// If it's a redirect, re-throw it
 		if (error?.status === 302) {
 			throw error;
 		}
 
-		// For other errors, try to handle gracefully
-		throw new Error("Failed to load application data");
+		// For other errors, try to provide fallback data
+		try {
+			const session = await auth.api.getSession({
+				headers: request.headers,
+			});
+
+			if (!session) {
+				throw redirect(302, "/signin");
+			}
+
+			// Return minimal fallback data
+			return {
+				user: session.user,
+				companies: [],
+				currentCompany: null,
+				selectedCompanyId: null,
+				analytics: null,
+				todaysViews: 0,
+			};
+		} catch (fallbackError) {
+			console.error("Fallback also failed:", fallbackError);
+			throw redirect(302, "/signin");
+		}
 	}
 };

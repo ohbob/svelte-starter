@@ -4,66 +4,31 @@
 	import { enhance } from "$app/forms";
 	import { browser } from "$app/environment";
 	import EditableCard from "$lib/components/ui/editable-card.svelte";
-
 	let { data, form } = $props();
-
 	// Individual field states for debounced saving
 	let fields = $state({
-		name: { value: data.currentCompany?.name || "", saving: false, lastSaved: null },
-		slug: { value: data.currentCompany?.slug || "", saving: false, lastSaved: null },
-		slugInput: data.currentCompany?.slug || "", // Separate input value for natural typing
-		email: { value: data.currentCompany?.email || "", saving: false, lastSaved: null },
-		phone: { value: data.currentCompany?.phone || "", saving: false, lastSaved: null },
-		vat: { value: data.currentCompany?.vat || "", saving: false, lastSaved: null },
-		regNr: { value: data.currentCompany?.regNr || "", saving: false, lastSaved: null },
-		description: { value: data.currentCompany?.description || "", saving: false, lastSaved: null },
+		name: { value: "", saving: false, lastSaved: null },
+		slug: { value: "", saving: false, lastSaved: null },
+		slugInput: "", // Separate input value for natural typing
+		email: { value: "", saving: false, lastSaved: null },
+		phone: { value: "", saving: false, lastSaved: null },
+		vat: { value: "", saving: false, lastSaved: null },
+		regNr: { value: "", saving: false, lastSaved: null },
+		description: { value: "", saving: false, lastSaved: null },
 	});
-
-	// Debounce timers for each field
-	let debounceTimers = {};
-
-	// Auto-save function for individual fields
-	const autoSave = async (fieldName, value) => {
-		if (!browser || !data.currentCompany?.id) return;
-
-		fields[fieldName].saving = true;
-
-		try {
-			const response = await fetch(`/api/companies/${data.currentCompany.id}`, {
-				method: "PUT",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ [fieldName]: value }),
-			});
-
-			if (response.ok) {
-				fields[fieldName].lastSaved = new Date();
-				toast.success(`${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)} updated`);
-			} else {
-				const error = await response.json();
-				toast.error(error.message || "Failed to update");
-			}
-		} catch (error) {
-			toast.error("Failed to update");
-		} finally {
-			fields[fieldName].saving = false;
+	// Update fields when company data changes (reactive to company switching)
+	$effect(() => {
+		if (data.company) {
+			fields.name.value = data.company.name || "";
+			fields.slug.value = data.company.slug || "";
+			fields.slugInput = data.company.slug || "";
+			fields.email.value = data.company.email || "";
+			fields.phone.value = data.company.phone || "";
+			fields.vat.value = data.company.vat || "";
+			fields.regNr.value = data.company.regNr || "";
+			fields.description.value = data.company.description || "";
 		}
-	};
-
-	// Debounced input handler
-	const handleInput = (fieldName, value) => {
-		fields[fieldName].value = value;
-
-		// Clear existing timer
-		if (debounceTimers[fieldName]) {
-			clearTimeout(debounceTimers[fieldName]);
-		}
-
-		// Set new timer
-		debounceTimers[fieldName] = setTimeout(() => {
-			autoSave(fieldName, value);
-		}, 1000); // 1 second debounce
-	};
-
+	});
 	// Generate slug from name
 	const generateSlug = (name) => {
 		return name
@@ -71,7 +36,6 @@
 			.replace(/[^a-z0-9]+/g, "-")
 			.replace(/^-+|-+$/g, "");
 	};
-
 	// Handle name change to auto-generate slug
 	const handleNameChange = (value) => {
 		if (value && !fields.slug.value) {
@@ -80,7 +44,6 @@
 			fields.slugInput = newSlug;
 		}
 	};
-
 	// Reactive statement to convert slug input to proper slug format
 	$effect(() => {
 		if (fields.slugInput !== undefined) {
@@ -90,13 +53,11 @@
 				.replace(/\s+/g, "-")
 				.replace(/-+/g, "-")
 				.replace(/^-+|-+$/g, "");
-
 			if (formatted !== fields.slug.value) {
 				fields.slug.value = formatted;
 			}
 		}
 	});
-
 	// Icons for each field
 	const icons = {
 		building:
@@ -121,7 +82,6 @@
 			Manage your company information. Changes are saved automatically.
 		</p>
 	</div>
-
 	<!-- Company Information Cards -->
 	<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
 		<!-- Company Name -->
@@ -133,21 +93,31 @@
 			placeholder="Enter company name"
 			icon={icons.building}
 			iconColor="blue"
-			companyId={data.currentCompany?.id}
 			fieldName="name"
 			onInput={handleNameChange}
 		/>
-
 		<!-- Company URL -->
 		<div class="rounded-lg border border-gray-200 bg-white p-6">
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<div class="text-sm font-medium text-gray-500">Company URL</div>
-					<input
-						type="text"
-						bind:value={fields.slugInput}
+					<EditableCard
+						label=""
+						bind:value={fields.slug.value}
+						bind:saving={fields.slug.saving}
+						bind:lastSaved={fields.slug.lastSaved}
 						placeholder="company-url"
-						class="w-full border-none bg-transparent p-0 text-lg font-semibold text-gray-900 placeholder-gray-400 outline-none focus:ring-0"
+						fieldName="slug"
+						onInput={(value) => {
+							// Allow natural typing with spaces that get converted to hyphens
+							const formatted = value
+								.toLowerCase()
+								.replace(/[^a-z0-9-\s]/g, "")
+								.replace(/\s+/g, "-")
+								.replace(/-+/g, "-")
+								.replace(/^-+|-+$/g, "");
+							fields.slug.value = formatted;
+						}}
 					/>
 					<div class="mt-1 text-xs text-gray-500">
 						{#if fields.slug.value}
@@ -163,18 +133,12 @@
 							yoursite.com/c/company-url
 						{/if}
 					</div>
-					{#if fields.slug.saving}
-						<div class="text-xs text-blue-600">Saving...</div>
-					{:else if fields.slug.lastSaved}
-						<div class="text-xs text-green-600">✓ Saved</div>
-					{/if}
 				</div>
 				<div class="ml-4 flex h-8 w-8 items-center justify-center rounded-lg bg-green-100">
 					<span class="text-green-600">{@html icons.link}</span>
 				</div>
 			</div>
 		</div>
-
 		<!-- Email -->
 		<EditableCard
 			label="Email Address"
@@ -185,10 +149,8 @@
 			placeholder="contact@company.com"
 			icon={icons.email}
 			iconColor="purple"
-			companyId={data.currentCompany?.id}
 			fieldName="email"
 		/>
-
 		<!-- Phone -->
 		<EditableCard
 			label="Phone Number"
@@ -199,10 +161,8 @@
 			placeholder="+1 (555) 123-4567"
 			icon={icons.phone}
 			iconColor="orange"
-			companyId={data.currentCompany?.id}
 			fieldName="phone"
 		/>
-
 		<!-- VAT Number -->
 		<EditableCard
 			label="VAT Number"
@@ -211,36 +171,33 @@
 			bind:lastSaved={fields.vat.lastSaved}
 			placeholder="VAT123456789"
 			icon={icons.calculator}
-			iconColor="red"
-			companyId={data.currentCompany?.id}
+			iconColor="indigo"
 			fieldName="vat"
 		/>
-
 		<!-- Registration Number -->
 		<EditableCard
 			label="Registration Number"
 			bind:value={fields.regNr.value}
 			bind:saving={fields.regNr.saving}
 			bind:lastSaved={fields.regNr.lastSaved}
-			placeholder="REG123456789"
+			placeholder="REG123456"
 			icon={icons.document}
-			iconColor="indigo"
-			companyId={data.currentCompany?.id}
+			iconColor="red"
 			fieldName="regNr"
 		/>
 	</div>
-
-	<!-- Description Card (Full Width) -->
-	<EditableCard
-		label="Company Description"
-		bind:value={fields.description.value}
-		bind:saving={fields.description.saving}
-		bind:lastSaved={fields.description.lastSaved}
-		placeholder="Tell people about your company..."
-		rows={4}
-		icon={icons.text}
-		iconColor="gray"
-		companyId={data.currentCompany?.id}
-		fieldName="description"
-	/>
+	<!-- Description - Full Width -->
+	<div class="mt-6">
+		<EditableCard
+			label="Company Description"
+			bind:value={fields.description.value}
+			bind:saving={fields.description.saving}
+			bind:lastSaved={fields.description.lastSaved}
+			placeholder="Tell us about your company..."
+			icon={icons.text}
+			iconColor="gray"
+			fieldName="description"
+			rows={4}
+		/>
+	</div>
 </div>
