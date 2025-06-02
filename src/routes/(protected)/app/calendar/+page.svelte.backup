@@ -14,7 +14,7 @@
 	let availableCalendars = $state([]);
 	let meetingTypes = $state([]);
 	let availability = $state([]);
-
+	
 	let upcomingBookings = $state([]);
 	let loading = $state(false);
 	let showCalendarSelector = $state(false);
@@ -58,16 +58,16 @@
 		availableCalendars = data.availableCalendars || [];
 		meetingTypes = data.meetingTypes || [];
 		availability = data.availability || [];
-
+		
 		// Update availability form if we have server data
 		if (data.availability && data.availability.length > 0) {
 			// Reset form first
-			availabilityForm.forEach((day) => {
+			availabilityForm.forEach(day => {
 				day.enabled = false;
 				day.startTime = "09:00";
 				day.endTime = "17:00";
 			});
-
+			
 			// Apply server data
 			data.availability.forEach((avail) => {
 				const formDay = availabilityForm.find((f) => f.dayOfWeek === avail.dayOfWeek);
@@ -84,12 +84,12 @@
 	$effect(() => {
 		if (form?.success) {
 			toast.success(form.message || "Operation completed successfully");
-
+			
 			// Handle specific form results
 			if (form.integration) {
 				calendarIntegration = form.integration;
 			}
-
+			
 			// Close modals
 			if (form.message?.includes("Calendar")) {
 				showCalendarSelector = false;
@@ -120,8 +120,7 @@
 				access_denied: "Calendar connection was denied",
 				missing_params: "Invalid callback parameters",
 				connection_failed: "Failed to connect calendar",
-				insufficient_permission:
-					"Insufficient permissions. Please ensure Google Calendar API is enabled in your Google Cloud Console.",
+				insufficient_permission: "Insufficient permissions. Please ensure Google Calendar API is enabled in your Google Cloud Console.",
 				no_calendar: "No primary calendar found in your Google account",
 				invalid_grant: "Invalid authorization grant. Please try connecting again.",
 				no_company: "No company selected. Please select a company first.",
@@ -162,17 +161,17 @@
 	function deleteMeetingType(meetingType) {
 		if (confirm(`Are you sure you want to delete "${meetingType.name}"?`)) {
 			// Create a temporary form for deletion
-			const form = document.createElement("form");
-			form.method = "POST";
-			form.action = "?/deleteMeetingType";
-			form.style.display = "none";
-
-			const input = document.createElement("input");
-			input.type = "hidden";
-			input.name = "id";
+			const form = document.createElement('form');
+			form.method = 'POST';
+			form.action = '?/deleteMeetingType';
+			form.style.display = 'none';
+			
+			const input = document.createElement('input');
+			input.type = 'hidden';
+			input.name = 'id';
 			input.value = meetingType.id;
 			form.appendChild(input);
-
+			
 			document.body.appendChild(form);
 			form.submit();
 			document.body.removeChild(form);
@@ -181,23 +180,23 @@
 
 	function saveAvailability() {
 		const availabilityData = availabilityForm
-			.filter((day) => day.enabled)
-			.map((day) => ({
+			.filter(day => day.enabled)
+			.map(day => ({
 				dayOfWeek: day.dayOfWeek,
 				startTime: day.startTime,
-				endTime: day.endTime,
+				endTime: day.endTime
 			}));
 
-		const form = document.createElement("form");
-		form.method = "POST";
-		form.action = "?/saveAvailability";
-
-		const input = document.createElement("input");
-		input.type = "hidden";
-		input.name = "availability";
+		const form = document.createElement('form');
+		form.method = 'POST';
+		form.action = '?/saveAvailability';
+		
+		const input = document.createElement('input');
+		input.type = 'hidden';
+		input.name = 'availability';
 		input.value = JSON.stringify(availabilityData);
 		form.appendChild(input);
-
+		
 		document.body.appendChild(form);
 		form.submit();
 		document.body.removeChild(form);
@@ -210,32 +209,6 @@
 	function handleShowCalendarSelector() {
 		selectedCalendarId = calendarIntegration?.selectedCalendarId || null;
 		showCalendarSelector = true;
-
-		// Lazy load calendars when modal opens if we don't have any
-		if (availableCalendars.length === 0 && isCalendarConnected) {
-			loadAvailableCalendars();
-		}
-	}
-
-	async function loadAvailableCalendars() {
-		if (loadingCalendars) return; // Prevent multiple requests
-
-		loadingCalendars = true;
-		try {
-			const response = await fetch("/api/calendar/calendars");
-			const result = await response.json();
-
-			if (response.ok) {
-				availableCalendars = result.calendars || [];
-			} else {
-				toast.error(result.error || "Failed to load calendars");
-			}
-		} catch (error) {
-			console.error("Error loading calendars:", error);
-			toast.error("Failed to load calendars");
-		} finally {
-			loadingCalendars = false;
-		}
 	}
 
 	function handleCalendarSelectorCancel() {
@@ -246,6 +219,19 @@
 	function handleCalendarSelect(event) {
 		const calendarId = event.currentTarget.dataset.calendarId;
 		selectedCalendarId = calendarId;
+	}
+
+	function handleCalendarSave() {
+		if (!selectedCalendarId || selectingCalendar) return;
+		
+		selectingCalendar = true;
+		
+		// Update the hidden input value before form submission
+		const form = document.querySelector('.calendar-selector-form');
+		const input = form?.querySelector('input[name="calendarId"]');
+		if (input) {
+			input.value = selectedCalendarId;
+		}
 	}
 
 	function handleMeetingTypeFormCancel() {
@@ -496,16 +482,16 @@
 				{editingMeetingType ? "Edit Meeting" : "Create Meeting"}
 			</h3>
 
-			<form
-				method="POST"
-				action={editingMeetingType ? "?/updateMeetingType" : "?/createMeetingType"}
-				use:enhance
+			<form 
+				method="POST" 
+				action={editingMeetingType ? "?/updateMeetingType" : "?/createMeetingType"} 
+				use:enhance 
 				class="space-y-4"
 			>
 				{#if editingMeetingType}
 					<input type="hidden" name="id" value={editingMeetingType.id} />
 				{/if}
-
+				
 				<div>
 					<label for="meetingName" class="mb-1 block text-sm font-medium text-gray-700">Name</label>
 					<input
@@ -520,9 +506,7 @@
 				</div>
 
 				<div>
-					<label for="meetingDescription" class="mb-1 block text-sm font-medium text-gray-700"
-						>Description</label
-					>
+					<label for="meetingDescription" class="mb-1 block text-sm font-medium text-gray-700">Description</label>
 					<textarea
 						id="meetingDescription"
 						name="description"
@@ -535,9 +519,7 @@
 
 				<div class="grid grid-cols-2 gap-4">
 					<div>
-						<label for="meetingDuration" class="mb-1 block text-sm font-medium text-gray-700"
-							>Duration (minutes)</label
-						>
+						<label for="meetingDuration" class="mb-1 block text-sm font-medium text-gray-700">Duration (minutes)</label>
 						<input
 							type="number"
 							id="meetingDuration"
@@ -552,9 +534,7 @@
 					</div>
 
 					<div>
-						<label for="meetingPrice" class="mb-1 block text-sm font-medium text-gray-700"
-							>Price (cents)</label
-						>
+						<label for="meetingPrice" class="mb-1 block text-sm font-medium text-gray-700">Price (cents)</label>
 						<input
 							type="number"
 							id="meetingPrice"
@@ -568,9 +548,7 @@
 				</div>
 
 				<div>
-					<label for="meetingColor" class="mb-1 block text-sm font-medium text-gray-700"
-						>Color</label
-					>
+					<label for="meetingColor" class="mb-1 block text-sm font-medium text-gray-700">Color</label>
 					<input
 						type="color"
 						id="meetingColor"
@@ -613,20 +591,8 @@
 			<h3 class="mb-4 text-lg font-semibold text-gray-900">Set Availability</h3>
 
 			<form method="POST" action="?/saveAvailability" use:enhance class="space-y-4">
-				<input
-					type="hidden"
-					name="availability"
-					value={JSON.stringify(
-						availabilityForm
-							.filter((day) => day.enabled)
-							.map((day) => ({
-								dayOfWeek: day.dayOfWeek,
-								startTime: day.startTime,
-								endTime: day.endTime,
-							}))
-					)}
-				/>
-
+				<input type="hidden" name="availability" value={JSON.stringify(availabilityForm.filter(day => day.enabled).map(day => ({ dayOfWeek: day.dayOfWeek, startTime: day.startTime, endTime: day.endTime })))} />
+				
 				{#each availabilityForm as day}
 					<div class="flex items-center gap-4">
 						<div class="w-20">
@@ -680,26 +646,12 @@
 			<p class="mb-4 text-gray-600">Choose which calendar to use for your bookings:</p>
 
 			<form method="POST" action="?/selectCalendar" use:enhance class="calendar-selector-form">
-				<input type="hidden" name="calendarId" value={selectedCalendarId || ""} />
-
-				{#if loadingCalendars}
-					<div class="py-8 text-center text-gray-500">
-						<div
-							class="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"
-						></div>
-						<p>Loading calendars...</p>
-					</div>
-				{:else if availableCalendars.length === 0}
+				<input type="hidden" name="calendarId" value="" />
+				
+				{#if availableCalendars.length === 0}
 					<div class="py-8 text-center text-gray-500">
 						<p>No calendars found</p>
 						<p class="text-sm">Make sure you have calendars in your Google account</p>
-						<button
-							type="button"
-							onclick={loadAvailableCalendars}
-							class="mt-2 text-sm text-blue-600 underline hover:text-blue-700"
-						>
-							Try again
-						</button>
 					</div>
 				{:else}
 					<div class="max-h-60 space-y-2 overflow-y-auto">
@@ -741,10 +693,11 @@
 						Cancel
 					</Button>
 					{#if selectedCalendarId}
-						<Button
+						<Button 
 							type="submit"
 							class="bg-blue-600 hover:bg-blue-700"
 							disabled={selectingCalendar}
+							onclick={handleCalendarSave}
 						>
 							{#if selectingCalendar}
 								<div class="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>

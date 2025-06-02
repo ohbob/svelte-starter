@@ -1,13 +1,10 @@
-import { auth } from "$lib/server/auth";
 import { db } from "$lib/server/db";
 import { companies } from "$lib/server/schema";
 import { redirect } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 import type { LayoutServerLoad } from "./$types";
 
-export const load: LayoutServerLoad = async ({ request, cookies, parent }) => {
-	console.log("🔄 App layout load triggered");
-
+export const load: LayoutServerLoad = async ({ parent }) => {
 	try {
 		// Get minimal data from parent layout
 		const parentData = await parent();
@@ -54,26 +51,7 @@ export const load: LayoutServerLoad = async ({ request, cookies, parent }) => {
 			throw error;
 		}
 
-		// For other errors, try to provide fallback data
-		try {
-			const session = await auth.api.getSession({
-				headers: request.headers,
-			});
-
-			if (!session) {
-				throw redirect(302, "/signin");
-			}
-
-			// Return minimal fallback data
-			return {
-				user: session.user,
-				companies: [],
-				currentCompany: null,
-				selectedCompanyId: null,
-			};
-		} catch (fallbackError) {
-			console.error("Fallback also failed:", fallbackError);
-			throw redirect(302, "/signin");
-		}
+		// For other errors, redirect to signin instead of making another session call
+		throw redirect(302, "/signin");
 	}
 };

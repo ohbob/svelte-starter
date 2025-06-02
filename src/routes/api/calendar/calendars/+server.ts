@@ -3,22 +3,27 @@ import { CalendarManager } from "$lib/server/calendar";
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 
-export const GET: RequestHandler = async ({ request }) => {
-	const session = await auth.api.getSession({ headers: request.headers });
-
-	if (!session?.user?.id) {
-		return json({ error: "Unauthorized" }, { status: 401 });
-	}
-
+export const GET: RequestHandler = async ({ request, cookies }) => {
 	try {
-		const calendarManager = new CalendarManager();
-		const availableCalendars = await calendarManager.getAvailableCalendars(session.user.id);
+		const session = await auth.api.getSession({ headers: request.headers });
 
-		return json({
-			availableCalendars,
-		});
+		if (!session) {
+			return json({ error: "Unauthorized" }, { status: 401 });
+		}
+
+		// Get current company from cookies
+		const selectedCompanyId = cookies.get("selectedCompanyId");
+
+		if (!selectedCompanyId) {
+			return json({ error: "No company selected" }, { status: 400 });
+		}
+
+		const calendarManager = new CalendarManager();
+		const availableCalendars = await calendarManager.getAvailableCalendars(selectedCompanyId);
+
+		return json({ calendars: availableCalendars });
 	} catch (error) {
-		console.error("Error fetching available calendars:", error);
-		return json({ error: "Failed to fetch available calendars" }, { status: 500 });
+		console.error("Error loading available calendars:", error);
+		return json({ error: "Failed to load calendars" }, { status: 500 });
 	}
 };

@@ -358,14 +358,18 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 
 	// Check if company has calendar connected
 	async isCalendarConnected(companyId: string): Promise<boolean> {
-		const integration = await db.query.calendarIntegrations.findFirst({
-			where: and(
-				eq(calendarIntegrations.companyId, companyId),
-				eq(calendarIntegrations.isActive, true)
-			),
-		});
-
-		return !!integration;
+		try {
+			const integration = await db.query.calendarIntegrations.findFirst({
+				where: and(
+					eq(calendarIntegrations.companyId, companyId),
+					eq(calendarIntegrations.isActive, true)
+				),
+			});
+			return !!integration;
+		} catch (error) {
+			console.error("Error checking calendar connection:", error);
+			return false;
+		}
 	}
 
 	// Disconnect calendar
@@ -404,7 +408,10 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 	}
 
 	// Select a specific calendar for the company
-	async selectCalendar(companyId: string, calendarId: string): Promise<void> {
+	async selectCalendar(
+		companyId: string,
+		calendarId: string
+	): Promise<typeof calendarIntegrations.$inferSelect> {
 		// First, get the calendar details to store the name
 		await this.setupAuthForCompany(companyId);
 		const calendarList = await this.calendar.calendarList.list();
@@ -424,5 +431,44 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 			.where(
 				and(eq(calendarIntegrations.companyId, companyId), eq(calendarIntegrations.isActive, true))
 			);
+
+		// Return the updated integration
+		const updatedIntegration = await db.query.calendarIntegrations.findFirst({
+			where: and(
+				eq(calendarIntegrations.companyId, companyId),
+				eq(calendarIntegrations.isActive, true)
+			),
+		});
+
+		if (!updatedIntegration) {
+			throw new Error("Failed to retrieve updated integration");
+		}
+
+		return updatedIntegration;
+	}
+
+	async getCalendarStatus(companyId: string): Promise<{
+		isConnected: boolean;
+		integration: typeof calendarIntegrations.$inferSelect | null;
+	}> {
+		try {
+			const integration = await db.query.calendarIntegrations.findFirst({
+				where: and(
+					eq(calendarIntegrations.companyId, companyId),
+					eq(calendarIntegrations.isActive, true)
+				),
+			});
+
+			return {
+				isConnected: !!integration,
+				integration: integration || null,
+			};
+		} catch (error) {
+			console.error("Error getting calendar status:", error);
+			return {
+				isConnected: false,
+				integration: null,
+			};
+		}
 	}
 }

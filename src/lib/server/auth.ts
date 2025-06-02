@@ -58,14 +58,13 @@ export const auth = betterAuth({
 	// Auto-create company when user signs up
 	hooks: {
 		after: createAuthMiddleware(async (ctx) => {
-			console.log("🔄 Hook triggered for path:", ctx.path);
-
 			// Check if this is a signup or OAuth callback
 			if (
 				ctx.path.includes("sign-up") ||
 				ctx.path.includes("callback") ||
 				ctx.path.includes("oauth")
 			) {
+				console.log("🔄 Hook triggered for path:", ctx.path);
 				const newSession = ctx.context.newSession;
 
 				if (newSession && newSession.user) {
