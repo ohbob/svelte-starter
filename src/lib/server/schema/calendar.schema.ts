@@ -1,13 +1,14 @@
 import { relations } from "drizzle-orm";
 import { boolean, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth.schema";
+import { companies } from "./companies.schema";
 
-// Calendar integrations - stores Google Calendar OAuth tokens
+// Calendar integrations - stores Google Calendar OAuth tokens per company
 export const calendarIntegrations = pgTable("calendar_integrations", {
 	id: uuid("id").primaryKey().defaultRandom(),
-	userId: text("user_id")
+	companyId: text("company_id")
 		.notNull()
-		.references(() => user.id, { onDelete: "cascade" }),
+		.references(() => companies.id, { onDelete: "cascade" }),
 	provider: text("provider").notNull().default("google"), // future: outlook, etc.
 	accessToken: text("access_token").notNull(),
 	refreshToken: text("refresh_token"),
@@ -20,12 +21,12 @@ export const calendarIntegrations = pgTable("calendar_integrations", {
 	updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-// Meeting types - like "30min call", "1hr consultation", etc.
+// Meeting types - like "30min call", "1hr consultation", etc. - per company
 export const meetingTypes = pgTable("meeting_types", {
 	id: uuid("id").primaryKey().defaultRandom(),
-	userId: text("user_id")
+	companyId: text("company_id")
 		.notNull()
-		.references(() => user.id, { onDelete: "cascade" }),
+		.references(() => companies.id, { onDelete: "cascade" }),
 	name: text("name").notNull(), // "30 Minute Meeting"
 	slug: text("slug").notNull(), // "30min-meeting"
 	description: text("description"),
@@ -41,12 +42,12 @@ export const meetingTypes = pgTable("meeting_types", {
 	updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-// User availability - when users are available for bookings
+// Company availability - when companies are available for bookings
 export const availability = pgTable("availability", {
 	id: uuid("id").primaryKey().defaultRandom(),
-	userId: text("user_id")
+	companyId: text("company_id")
 		.notNull()
-		.references(() => user.id, { onDelete: "cascade" }),
+		.references(() => companies.id, { onDelete: "cascade" }),
 	dayOfWeek: integer("day_of_week").notNull(), // 0 = Sunday, 1 = Monday, etc.
 	startTime: text("start_time").notNull(), // "09:00"
 	endTime: text("end_time").notNull(), // "17:00"
@@ -107,9 +108,9 @@ export const bookingAnswers = pgTable("booking_answers", {
 
 // Relations for TypeScript support
 export const meetingTypesRelations = relations(meetingTypes, ({ one, many }) => ({
-	user: one(user, {
-		fields: [meetingTypes.userId],
-		references: [user.id],
+	company: one(companies, {
+		fields: [meetingTypes.companyId],
+		references: [companies.id],
 	}),
 	bookings: many(bookings),
 	questions: many(bookingQuestions),
@@ -147,15 +148,15 @@ export const bookingAnswersRelations = relations(bookingAnswers, ({ one }) => ({
 }));
 
 export const availabilityRelations = relations(availability, ({ one }) => ({
-	user: one(user, {
-		fields: [availability.userId],
-		references: [user.id],
+	company: one(companies, {
+		fields: [availability.companyId],
+		references: [companies.id],
 	}),
 }));
 
 export const calendarIntegrationsRelations = relations(calendarIntegrations, ({ one }) => ({
-	user: one(user, {
-		fields: [calendarIntegrations.userId],
-		references: [user.id],
+	company: one(companies, {
+		fields: [calendarIntegrations.companyId],
+		references: [companies.id],
 	}),
 }));

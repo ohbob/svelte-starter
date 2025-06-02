@@ -52,6 +52,7 @@
 		"@fontsource/inter": "^5.2.5",
 		"better-auth": "^1.1.19",
 		"date-fns": "^4.1.0",
+		"dotenv": "^16.5.0",
 		"drizzle-orm": "^0.39.3",
 		"esbuild": "^0.25.5",
 		"googleapis": "^149.0.0",

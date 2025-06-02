@@ -1,8 +1,8 @@
 import { trackPageView } from "$lib/server/analytics";
 import { db } from "$lib/server/db";
-import { meetingTypes, services, user } from "$lib/server/schema";
+import { companies, meetingTypes, user } from "$lib/server/schema";
 import { error } from "@sveltejs/kit";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, request }) => {
@@ -28,19 +28,21 @@ export const load: PageServerLoad = async ({ params, request }) => {
 	// Track page view
 	await trackPageView(userData.id, `/u/${params.username}`, request);
 
-	// Get user's active services
-	const userServices = await db
-		.select()
-		.from(services)
-		.where(and(eq(services.userId, userData.id), eq(services.isActive, true)))
-		.orderBy(services.createdAt);
+	// Get user's companies directly
+	const userCompanies = await db.select().from(companies).where(eq(companies.userId, userData.id));
 
-	// Get user's active meeting types
-	const userMeetingTypes = await db
-		.select()
-		.from(meetingTypes)
-		.where(and(eq(meetingTypes.userId, userData.id), eq(meetingTypes.isActive, true)))
-		.orderBy(meetingTypes.createdAt);
+	// Get company IDs
+	const companyIds = userCompanies.map((company) => company.id);
+
+	// Get meeting types for user's companies
+	const userMeetingTypes =
+		companyIds.length > 0
+			? await db
+					.select()
+					.from(meetingTypes)
+					.where(and(inArray(meetingTypes.companyId, companyIds), eq(meetingTypes.isActive, true)))
+					.orderBy(meetingTypes.createdAt)
+			: [];
 
 	return {
 		user: {
@@ -50,7 +52,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
 			image: userData.image,
 			customUrl: userData.customUrl,
 		},
-		services: userServices,
+		companies: userCompanies,
 		meetingTypes: userMeetingTypes,
 	};
 };

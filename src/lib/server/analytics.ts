@@ -1,86 +1,105 @@
 import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { db } from "./db";
-import { dailyAnalytics, referrerAnalytics } from "./schema";
+import { analytics, dailyAnalytics, referrerAnalytics } from "./schema";
 
-// Helper function to process referrer URL
-function processReferrer(referrerUrl: string) {
-	if (!referrerUrl) return null;
-
+// Track a page view
+export async function trackView(
+	companyId: string,
+	path: string,
+	referrer?: string,
+	userAgent?: string,
+	ipAddress?: string
+) {
 	try {
-		const url = new URL(referrerUrl);
+		// Get today's date
+		const today = new Date().toISOString().split("T")[0];
 
-		// Normalize domain (remove www)
-		const domain = url.hostname.replace(/^www\./, "");
+		// Parse referrer to extract domain and path
+		let domain = "direct";
+		let referrerPath = null;
+		let campaignParams = null;
 
-		// Limit path to 5 levels max
-		const pathParts = url.pathname.split("/").filter(Boolean);
-		const path = pathParts.length > 0 ? "/" + pathParts.slice(0, 5).join("/") : "/";
+		if (referrer && referrer !== "") {
+			try {
+				const url = new URL(referrer);
+				domain = url.hostname.replace(/^www\./, "");
+				referrerPath = url.pathname;
 
-		// Extract UTM and campaign parameters
-		const campaignParams: Record<string, string> = {};
-		const utmParams = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
-
-		utmParams.forEach((param) => {
-			const value = url.searchParams.get(param);
-			if (value) campaignParams[param] = value;
-		});
-
-		// Also capture other common campaign parameters
-		const otherParams = ["ref", "source", "campaign"];
-		otherParams.forEach((param) => {
-			const value = url.searchParams.get(param);
-			if (value) campaignParams[param] = value;
-		});
-
-		return {
-			domain,
-			path: path === "/" ? null : path,
-			campaignParams: Object.keys(campaignParams).length > 0 ? campaignParams : null,
-		};
-	} catch {
-		return null;
-	}
-}
-
-// Track a page view (upsert daily stats)
-export async function trackPageView(userId: string, path: string, request: Request) {
-	try {
-		const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
-		const referrerUrl = request.headers.get("referer") || "";
-
-		// Upsert daily analytics using raw SQL
-		await db.execute(sql`
-            INSERT INTO daily_analytics (user_id, date, views, created_at, updated_at)
-            VALUES (${userId}, ${today}, 1, NOW(), NOW())
-            ON CONFLICT (user_id, date)
-            DO UPDATE SET 
-                views = daily_analytics.views + 1,
-                updated_at = NOW()
-        `);
-
-		// Track referrer if present
-		if (referrerUrl) {
-			const referrerData = processReferrer(referrerUrl);
-			if (referrerData) {
-				const { domain, path: refPath, campaignParams } = referrerData;
-
-				await db.execute(sql`
-                    INSERT INTO referrer_analytics (user_id, date, domain, path, campaign_params, views, created_at, updated_at)
-                    VALUES (${userId}, ${today}, ${domain}, ${refPath}, ${campaignParams ? JSON.stringify(campaignParams) : null}, 1, NOW(), NOW())
-                    ON CONFLICT (user_id, date, domain, path)
-                    DO UPDATE SET 
-                        views = referrer_analytics.views + 1,
-                        updated_at = NOW()
-                `);
+				// Extract campaign parameters
+				const searchParams = url.searchParams;
+				const utmParams: Record<string, string> = {};
+				for (const [key, value] of searchParams.entries()) {
+					if (key.startsWith("utm_") || key.startsWith("ref_")) {
+						utmParams[key] = value;
+					}
+				}
+				if (Object.keys(utmParams).length > 0) {
+					campaignParams = utmParams;
+				}
+			} catch {
+				// If URL parsing fails, treat as direct
+				domain = "direct";
 			}
 		}
+
+		// Update daily analytics (upsert)
+		await db
+			.insert(dailyAnalytics)
+			.values({
+				companyId,
+				date: today,
+				views: 1,
+			})
+			.onConflictDoUpdate({
+				target: [dailyAnalytics.companyId, dailyAnalytics.date],
+				set: {
+					views: sql`${dailyAnalytics.views} + 1`,
+					updatedAt: new Date(),
+				},
+			});
+
+		// Update referrer analytics (upsert)
+		await db
+			.insert(referrerAnalytics)
+			.values({
+				companyId,
+				date: today,
+				domain,
+				path: referrerPath,
+				campaignParams,
+				views: 1,
+			})
+			.onConflictDoUpdate({
+				target: [
+					referrerAnalytics.companyId,
+					referrerAnalytics.date,
+					referrerAnalytics.domain,
+					referrerAnalytics.path,
+				],
+				set: {
+					views: sql`${referrerAnalytics.views} + 1`,
+					updatedAt: new Date(),
+				},
+			});
+
+		// Also store in the raw analytics table for detailed tracking
+		await db.insert(analytics).values({
+			companyId,
+			path,
+			userAgent,
+			ipAddress,
+			referrer,
+		});
+
+		console.log(`Tracked view for company ${companyId}: ${path} from ${domain}`);
 	} catch (error) {
-		console.error("Failed to track page view:", error);
+		console.error("Failed to track view:", error);
+		// Don't throw - analytics failures shouldn't break the app
 	}
 }
 
 // Get analytics data for dashboard
-export async function getAnalytics(userId: string, days: number = 30) {
+export async function getAnalytics(companyId: string, days: number = 30) {
 	const startDate = new Date();
 	startDate.setDate(startDate.getDate() - days);
 	const startDateStr = startDate.toISOString().split("T")[0];
@@ -92,19 +111,19 @@ export async function getAnalytics(userId: string, days: number = 30) {
 	const totalViewsResult = await db
 		.select({ total: sql<number>`sum(views)` })
 		.from(dailyAnalytics)
-		.where(eq(dailyAnalytics.userId, userId));
+		.where(eq(dailyAnalytics.companyId, companyId));
 
 	// Get today's views
 	const todayViewsResult = await db
 		.select({ total: sql<number>`sum(views)` })
 		.from(dailyAnalytics)
-		.where(and(eq(dailyAnalytics.userId, userId), eq(dailyAnalytics.date, today)));
+		.where(and(eq(dailyAnalytics.companyId, companyId), eq(dailyAnalytics.date, today)));
 
 	// Get recent views (last X days)
 	const recentViewsResult = await db
 		.select({ total: sql<number>`sum(views)` })
 		.from(dailyAnalytics)
-		.where(and(eq(dailyAnalytics.userId, userId), gte(dailyAnalytics.date, startDateStr)));
+		.where(and(eq(dailyAnalytics.companyId, companyId), gte(dailyAnalytics.date, startDateStr)));
 
 	// Get daily views for chart
 	const dailyViews = await db
@@ -113,7 +132,7 @@ export async function getAnalytics(userId: string, days: number = 30) {
 			views: dailyAnalytics.views,
 		})
 		.from(dailyAnalytics)
-		.where(and(eq(dailyAnalytics.userId, userId), gte(dailyAnalytics.date, startDateStr)))
+		.where(and(eq(dailyAnalytics.companyId, companyId), gte(dailyAnalytics.date, startDateStr)))
 		.orderBy(dailyAnalytics.date);
 
 	// Get top referrers (last X days)
@@ -124,7 +143,9 @@ export async function getAnalytics(userId: string, days: number = 30) {
 			views: sql<number>`sum(views)`,
 		})
 		.from(referrerAnalytics)
-		.where(and(eq(referrerAnalytics.userId, userId), gte(referrerAnalytics.date, startDateStr)))
+		.where(
+			and(eq(referrerAnalytics.companyId, companyId), gte(referrerAnalytics.date, startDateStr))
+		)
 		.groupBy(referrerAnalytics.domain, referrerAnalytics.path)
 		.orderBy(desc(sql`sum(views)`))
 		.limit(10);
@@ -137,7 +158,7 @@ export async function getAnalytics(userId: string, days: number = 30) {
 			views: sql<number>`sum(views)`,
 		})
 		.from(referrerAnalytics)
-		.where(and(eq(referrerAnalytics.userId, userId), eq(referrerAnalytics.date, today)))
+		.where(and(eq(referrerAnalytics.companyId, companyId), eq(referrerAnalytics.date, today)))
 		.groupBy(referrerAnalytics.domain, referrerAnalytics.path)
 		.orderBy(desc(sql`sum(views)`))
 		.limit(5);

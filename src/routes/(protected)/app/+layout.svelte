@@ -5,9 +5,26 @@
 	import { authClient } from "$lib/auth-client";
 	import { page } from "$app/stores";
 	import NotificationCenter from "$lib/components/NotificationCenter.svelte";
+	import { onMount } from "svelte";
+	import { browser } from "$app/environment";
+	import CompanySelector from "$lib/components/ui/company-selector.svelte";
 
 	let { data, children } = $props();
 	let showMobileMenu = $state(false);
+
+	// Sync localStorage with server-side cookie for company selection
+	onMount(() => {
+		if (browser) {
+			const selectedCompanyId = localStorage.getItem("selectedCompanyId");
+			if (selectedCompanyId) {
+				// Set cookie to sync with server
+				document.cookie = `selectedCompanyId=${selectedCompanyId}; path=/; max-age=${60 * 60 * 24 * 30}`; // 30 days
+			} else if (data.currentCompany) {
+				// Set localStorage to current company if not set
+				localStorage.setItem("selectedCompanyId", data.currentCompany.id);
+			}
+		}
+	});
 
 	const handleSignOut = async () => {
 		await authClient.signOut();
@@ -24,10 +41,9 @@
 
 	const navigation = [
 		{ name: "Dashboard", href: "/app", icon: "dashboard", shortName: "Home" },
-		{ name: "Company", href: "/app/company", icon: "company", shortName: "Company" },
-		{ name: "Website", href: "/app/website/services", icon: "website", shortName: "Website" },
 		{ name: "Calendar", href: "/app/calendar", icon: "calendar", shortName: "Calendar" },
 		{ name: "Analytics", href: "/app/analytics", icon: "analytics", shortName: "Analytics" },
+		{ name: "Company", href: "/app/company", icon: "company", shortName: "Company" },
 		{ name: "Profile", href: "/app/profile", icon: "profile", shortName: "Profile" },
 	];
 
@@ -35,20 +51,16 @@
 		if (href === "/app") {
 			return $page.url.pathname === "/app";
 		}
-		if (href === "/app/website/services") {
-			return $page.url.pathname.startsWith("/app/website");
-		}
 		return $page.url.pathname.startsWith(href);
 	};
 
 	const getPageTitle = () => {
 		if ($page.url.pathname === "/app") return "Dashboard";
-		if ($page.url.pathname.startsWith("/app/company")) return "Company";
-		if ($page.url.pathname.startsWith("/app/website")) return "Website";
 		if ($page.url.pathname.startsWith("/app/calendar")) return "Calendar";
 		if ($page.url.pathname.startsWith("/app/analytics")) return "Analytics";
 		if ($page.url.pathname.startsWith("/app/notifications")) return "Notifications";
 		if ($page.url.pathname.startsWith("/app/profile")) return "Profile";
+		if ($page.url.pathname.startsWith("/app/company")) return "Company Settings";
 		return "Admin Panel";
 	};
 </script>
@@ -57,21 +69,14 @@
 <div class="hidden h-screen bg-gray-50 lg:flex">
 	<!-- Desktop Sidebar -->
 	<div class="flex h-full w-64 flex-col border-r border-gray-200 bg-white">
-		<!-- Logo/Brand -->
-		<div class="flex h-[73px] items-center gap-3 border-b border-gray-200 px-6 py-5">
-			<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-black">
-				<svg class="h-5 w-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-					<path
-						d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"
-					/>
-				</svg>
-			</div>
-			<span class="text-lg font-semibold text-gray-900">Admin Panel</span>
+		<!-- Company Selector -->
+		<div class="flex h-[73px] items-center border-b border-gray-200 px-6 py-5">
+			<CompanySelector companies={data.companies} currentCompany={data.currentCompany} />
 		</div>
 
 		<!-- Desktop Navigation -->
 		<nav class="flex-1 space-y-2 px-4 py-6">
-			{#each navigation.slice(0, -1) as item}
+			{#each navigation as item}
 				<a
 					href={item.href}
 					class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors {isActive(
@@ -95,24 +100,6 @@
 								d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6a2 2 0 01-2 2H10a2 2 0 01-2-2V5z"
 							></path>
 						</svg>
-					{:else if item.icon === "company"}
-						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-							></path>
-						</svg>
-					{:else if item.icon === "website"}
-						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-							></path>
-						</svg>
 					{:else if item.icon === "calendar"}
 						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
@@ -131,6 +118,24 @@
 								d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
 							></path>
 						</svg>
+					{:else if item.icon === "company"}
+						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+							></path>
+						</svg>
+					{:else if item.icon === "profile"}
+						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+							></path>
+						</svg>
 					{/if}
 					{item.name}
 				</a>
@@ -140,7 +145,7 @@
 		<!-- View Public Profile Button -->
 		<div class="border-t border-gray-200 p-4">
 			<a
-				href="/u/{data.user.customUrl || data.user.name || data.user.id}"
+				href="/c/{data.currentCompany?.slug || 'company'}"
 				target="_blank"
 				class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
 			>
@@ -152,11 +157,9 @@
 						d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
 					></path>
 				</svg>
-				View Public Page
+				View Company Page
 			</a>
 		</div>
-
-		<!-- Desktop Profile Section - Removed from sidebar -->
 	</div>
 
 	<!-- Desktop Main content area -->
@@ -216,18 +219,9 @@
 	<!-- Mobile Top header -->
 	<header class="flex h-16 flex-shrink-0 items-center border-b border-gray-200 bg-white px-4">
 		<div class="flex w-full items-center justify-between">
-			<div class="flex items-center gap-3">
-				<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-black">
-					<svg class="h-5 w-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-						<path
-							d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"
-						/>
-					</svg>
-				</div>
-				<h1 class="text-lg font-semibold text-gray-900">
-					{getPageTitle()}
-				</h1>
-			</div>
+			<h1 class="text-lg font-semibold text-gray-900">
+				{getPageTitle()}
+			</h1>
 			<div class="flex items-center gap-2">
 				<NotificationCenter />
 				<button
@@ -279,24 +273,6 @@
 								d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6a2 2 0 01-2 2H10a2 2 0 01-2-2V5z"
 							></path>
 						</svg>
-					{:else if item.icon === "company"}
-						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-							></path>
-						</svg>
-					{:else if item.icon === "website"}
-						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-							></path>
-						</svg>
 					{:else if item.icon === "calendar"}
 						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
@@ -313,6 +289,15 @@
 								stroke-linejoin="round"
 								stroke-width="2"
 								d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+							></path>
+						</svg>
+					{:else if item.icon === "company"}
+						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
 							></path>
 						</svg>
 					{:else if item.icon === "profile"}
@@ -379,7 +364,20 @@
 				</div>
 			</div>
 			<div class="p-4">
-				<Button onclick={handleSignOut} variant="outline" class="w-full">Sign Out</Button>
+				<button
+					onclick={handleSignOut}
+					class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
+				>
+					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+						></path>
+					</svg>
+					Sign Out
+				</button>
 			</div>
 		</div>
 	</div>

@@ -4,7 +4,6 @@ import { addMinutes, endOfDay, startOfDay } from "date-fns";
 import { and, eq, gte, lte } from "drizzle-orm";
 import { google } from "googleapis";
 import { db } from "./db";
-import { notification } from "./notifications";
 import { availability, bookings, calendarIntegrations, meetingTypes } from "./schema";
 
 export class CalendarManager {
@@ -21,7 +20,7 @@ export class CalendarManager {
 	}
 
 	// Generate authorization URL for calendar integration
-	generateAuthUrl(userId: string): string {
+	generateAuthUrl(companyId: string): string {
 		return this.oauth2Client.generateAuthUrl({
 			access_type: "offline",
 			scope: [
@@ -30,15 +29,15 @@ export class CalendarManager {
 				"https://www.googleapis.com/auth/calendar.freebusy",
 				"https://www.googleapis.com/auth/calendar.readonly",
 			],
-			state: userId,
+			state: companyId,
 			prompt: "consent", // Force consent to get refresh token
 		});
 	}
 
 	// Handle OAuth callback and store tokens
-	async handleCallback(code: string, userId: string): Promise<void> {
+	async handleCallback(code: string, companyId: string): Promise<void> {
 		try {
-			console.log("Getting tokens for user:", userId);
+			console.log("Getting tokens for company:", companyId);
 			const { tokens } = await this.oauth2Client.getToken(code);
 			console.log("Tokens received:", {
 				hasAccessToken: !!tokens.access_token,
@@ -78,7 +77,7 @@ export class CalendarManager {
 			// Store integration in database
 			console.log("Storing calendar integration in database...");
 			await db.insert(calendarIntegrations).values({
-				userId,
+				companyId,
 				accessToken: tokens.access_token!,
 				refreshToken: tokens.refresh_token,
 				expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
@@ -89,30 +88,28 @@ export class CalendarManager {
 
 			console.log("Calendar integration stored successfully");
 
-			// Send success notification
-			await notification.success(
-				"Calendar Connected",
-				"Your Google Calendar has been successfully connected!",
-				{ userId }
-			);
-
-			console.log("Success notification sent");
+			// Send success notification (we'll need to update this to work with companies)
+			// For now, we'll skip the notification since it's user-based
+			console.log("Calendar integration completed for company:", companyId);
 		} catch (error) {
 			const err = error as Error;
 			console.error("Calendar callback error details:", {
 				message: err.message,
 				code: (err as any).code,
 				status: (err as any).status,
-				userId,
+				companyId,
 			});
 			throw new Error(`Failed to connect calendar: ${err.message}`);
 		}
 	}
 
-	// Get user's calendar integration
-	private async getCalendarIntegration(userId: string) {
+	// Get company's calendar integration
+	private async getCalendarIntegration(companyId: string) {
 		const integration = await db.query.calendarIntegrations.findFirst({
-			where: and(eq(calendarIntegrations.userId, userId), eq(calendarIntegrations.isActive, true)),
+			where: and(
+				eq(calendarIntegrations.companyId, companyId),
+				eq(calendarIntegrations.isActive, true)
+			),
 		});
 
 		if (!integration) {
@@ -149,9 +146,9 @@ export class CalendarManager {
 			.where(eq(calendarIntegrations.id, integration.id));
 	}
 
-	// Set up OAuth client with user's tokens
-	private async setupAuthForUser(userId: string) {
-		const integration = await this.getCalendarIntegration(userId);
+	// Set up OAuth client with company's tokens
+	private async setupAuthForCompany(companyId: string) {
+		const integration = await this.getCalendarIntegration(companyId);
 
 		this.oauth2Client.setCredentials({
 			access_token: integration.accessToken,
@@ -163,7 +160,7 @@ export class CalendarManager {
 
 	// Create calendar event for booking
 	async createEvent(bookingData: {
-		hostUserId: string;
+		hostCompanyId: string;
 		guestName: string;
 		guestEmail: string;
 		startTime: Date;
@@ -171,7 +168,7 @@ export class CalendarManager {
 		meetingType: typeof meetingTypes.$inferSelect;
 		notes?: string;
 	}): Promise<string> {
-		const integration = await this.setupAuthForUser(bookingData.hostUserId);
+		const integration = await this.setupAuthForCompany(bookingData.hostCompanyId);
 
 		const event = {
 			summary: `${bookingData.meetingType.name} with ${bookingData.guestName}`,
@@ -214,17 +211,17 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 
 	// Get available time slots for a date
 	async getAvailableSlots(
-		userId: string,
+		companyId: string,
 		date: Date,
 		duration: number
 	): Promise<{ start: Date; end: Date }[]> {
-		const integration = await this.setupAuthForUser(userId);
+		const integration = await this.setupAuthForCompany(companyId);
 
 		// Get user's availability for this day of week
 		const dayOfWeek = date.getDay();
 		const userAvailability = await db.query.availability.findMany({
 			where: and(
-				eq(availability.userId, userId),
+				eq(availability.companyId, companyId),
 				eq(availability.dayOfWeek, dayOfWeek),
 				eq(availability.isActive, true)
 			),
@@ -240,7 +237,7 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 
 		const existingBookings = await db.query.bookings.findMany({
 			where: and(
-				eq(bookings.hostUserId, userId),
+				eq(bookings.hostUserId, companyId),
 				gte(bookings.startTime, dayStart),
 				lte(bookings.startTime, dayEnd),
 				eq(bookings.status, "confirmed")
@@ -348,9 +345,9 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 	}
 
 	// Cancel calendar event
-	async cancelEvent(userId: string, eventId: string): Promise<void> {
-		await this.setupAuthForUser(userId);
-		const integration = await this.getCalendarIntegration(userId);
+	async cancelEvent(companyId: string, eventId: string): Promise<void> {
+		await this.setupAuthForCompany(companyId);
+		const integration = await this.getCalendarIntegration(companyId);
 
 		await this.calendar.events.delete({
 			calendarId: integration.selectedCalendarId || integration.calendarId!,
@@ -359,37 +356,45 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 		});
 	}
 
-	// Check if user has calendar connected
-	async isCalendarConnected(userId: string): Promise<boolean> {
+	// Check if company has calendar connected
+	async isCalendarConnected(companyId: string): Promise<boolean> {
 		const integration = await db.query.calendarIntegrations.findFirst({
-			where: and(eq(calendarIntegrations.userId, userId), eq(calendarIntegrations.isActive, true)),
+			where: and(
+				eq(calendarIntegrations.companyId, companyId),
+				eq(calendarIntegrations.isActive, true)
+			),
 		});
 
 		return !!integration;
 	}
 
 	// Disconnect calendar
-	async disconnectCalendar(userId: string): Promise<void> {
+	async disconnectCalendar(companyId: string): Promise<void> {
 		await db
 			.update(calendarIntegrations)
 			.set({
 				isActive: false,
 				updatedAt: new Date(),
 			})
-			.where(and(eq(calendarIntegrations.userId, userId), eq(calendarIntegrations.isActive, true)));
+			.where(
+				and(eq(calendarIntegrations.companyId, companyId), eq(calendarIntegrations.isActive, true))
+			);
 	}
 
-	// Get user's calendar integration (public method)
-	async getIntegration(userId: string) {
+	// Get company's calendar integration (public method)
+	async getIntegration(companyId: string) {
 		return await db.query.calendarIntegrations.findFirst({
-			where: and(eq(calendarIntegrations.userId, userId), eq(calendarIntegrations.isActive, true)),
+			where: and(
+				eq(calendarIntegrations.companyId, companyId),
+				eq(calendarIntegrations.isActive, true)
+			),
 		});
 	}
 
-	// Get available calendars for user
-	async getAvailableCalendars(userId: string): Promise<any[]> {
+	// Get available calendars for company
+	async getAvailableCalendars(companyId: string): Promise<any[]> {
 		try {
-			await this.setupAuthForUser(userId);
+			await this.setupAuthForCompany(companyId);
 			const calendarList = await this.calendar.calendarList.list();
 			return calendarList.data.items || [];
 		} catch (error) {
@@ -398,10 +403,10 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 		}
 	}
 
-	// Select a specific calendar for the user
-	async selectCalendar(userId: string, calendarId: string): Promise<void> {
+	// Select a specific calendar for the company
+	async selectCalendar(companyId: string, calendarId: string): Promise<void> {
 		// First, get the calendar details to store the name
-		await this.setupAuthForUser(userId);
+		await this.setupAuthForCompany(companyId);
 		const calendarList = await this.calendar.calendarList.list();
 		const selectedCalendar = calendarList.data.items?.find((cal: any) => cal.id === calendarId);
 
@@ -416,6 +421,8 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 				selectedCalendarName: selectedCalendar.summary,
 				updatedAt: new Date(),
 			})
-			.where(and(eq(calendarIntegrations.userId, userId), eq(calendarIntegrations.isActive, true)));
+			.where(
+				and(eq(calendarIntegrations.companyId, companyId), eq(calendarIntegrations.isActive, true))
+			);
 	}
 }

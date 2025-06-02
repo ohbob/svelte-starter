@@ -238,7 +238,7 @@
 			{/if}
 
 			<a
-				href="/app/website/services"
+				href="/app/company/services"
 				class="flex items-center justify-between rounded-lg border border-gray-200 p-3 transition-colors hover:border-gray-300"
 			>
 				<div class="flex items-center gap-3">

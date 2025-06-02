@@ -1,7 +1,6 @@
 export * from "./analytics.schema";
 export * from "./auth.schema";
 export * from "./calendar.schema";
-export * from "./company.schema";
+export * from "./companies.schema";
 export * from "./notifications.schema";
-export * from "./services.schema";
 // export your other schemas here

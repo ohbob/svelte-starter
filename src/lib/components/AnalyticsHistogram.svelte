@@ -123,9 +123,9 @@
 	}
 
 	// Tooltip state
-	let hoveredDay = null;
-	let tooltipX = 0;
-	let tooltipY = 0;
+	let hoveredDay = $state(null);
+	let tooltipX = $state(0);
+	let tooltipY = $state(0);
 
 	function handleBarHover(day, event) {
 		hoveredDay = day;
@@ -165,6 +165,8 @@
 								<!-- Stacked Bar -->
 								{#if !day.isFuture && day.totalViews > 0}
 									<div
+										role="button"
+										tabindex="0"
 										class="relative flex w-full max-w-[16px] cursor-pointer flex-col justify-end rounded-t transition-all duration-300 hover:opacity-90 {day.isToday
 											? 'ring-2 ring-blue-400 ring-offset-1'
 											: ''}"

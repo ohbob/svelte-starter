@@ -5,7 +5,7 @@ import type { RequestHandler } from "./$types";
 
 const schedulingManager = new SchedulingManager();
 
-export const GET: RequestHandler = async ({ request }) => {
+export const GET: RequestHandler = async ({ request, url }) => {
 	const session = await auth.api.getSession({ headers: request.headers });
 
 	if (!session) {
@@ -13,7 +13,17 @@ export const GET: RequestHandler = async ({ request }) => {
 	}
 
 	try {
-		const meetingTypes = await schedulingManager.getMeetingTypes(session.user.id);
+		const companyId = url.searchParams.get("companyId");
+
+		let meetingTypes;
+		if (companyId) {
+			// Get meeting types for specific company
+			meetingTypes = await schedulingManager.getCompanyMeetingTypes(companyId);
+		} else {
+			// Get meeting types for all user's companies
+			meetingTypes = await schedulingManager.getMeetingTypes(session.user.id);
+		}
+
 		return json({ meetingTypes });
 	} catch (error) {
 		console.error("Error fetching meeting types:", error);
@@ -32,11 +42,12 @@ export const POST: RequestHandler = async ({ request }) => {
 		const data = await request.json();
 
 		// Validate required fields
-		if (!data.name || !data.duration) {
-			return json({ error: "Name and duration are required" }, { status: 400 });
+		if (!data.name || !data.duration || !data.companyId) {
+			return json({ error: "Name, duration, and companyId are required" }, { status: 400 });
 		}
 
 		const meetingType = await schedulingManager.createMeetingType({
+			companyId: data.companyId,
 			userId: session.user.id,
 			name: data.name,
 			description: data.description,
@@ -52,6 +63,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ meetingType }, { status: 201 });
 	} catch (error) {
 		console.error("Error creating meeting type:", error);
+		if (error instanceof Error && error.message === "Company not found or unauthorized") {
+			return json({ error: "Company not found or unauthorized" }, { status: 403 });
+		}
 		return json({ error: "Failed to create meeting type" }, { status: 500 });
 	}
 };

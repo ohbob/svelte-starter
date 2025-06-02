@@ -1,9 +1,16 @@
 import { addMinutes, format } from "date-fns";
-import { and, asc, desc, eq, gte, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, ne } from "drizzle-orm";
 import { CalendarManager } from "./calendar";
 import { db } from "./db";
 import { notification } from "./notifications";
-import { availability, bookingAnswers, bookingQuestions, bookings, meetingTypes } from "./schema";
+import {
+	availability,
+	bookingAnswers,
+	bookingQuestions,
+	bookings,
+	companies,
+	meetingTypes,
+} from "./schema";
 
 export class SchedulingManager {
 	private calendarManager: CalendarManager;
@@ -12,9 +19,10 @@ export class SchedulingManager {
 		this.calendarManager = new CalendarManager();
 	}
 
-	// Create a new meeting type
+	// Create a new meeting type for a company
 	async createMeetingType(data: {
-		userId: string;
+		companyId: string;
+		userId: string; // For notifications
 		name: string;
 		description?: string;
 		duration: number;
@@ -25,24 +33,37 @@ export class SchedulingManager {
 		bufferTimeAfter?: number;
 		maxBookingsPerDay?: number;
 	}) {
-		const slug = await this.generateUniqueSlug(data.name, data.userId);
+		// Verify user owns the company
+		const company = await db.query.companies.findFirst({
+			where: and(eq(companies.id, data.companyId), eq(companies.userId, data.userId)),
+		});
+
+		if (!company) {
+			throw new Error("Company not found or unauthorized");
+		}
+
+		const slug = await this.generateUniqueSlug(data.name, data.companyId);
 
 		const meetingType = await db
 			.insert(meetingTypes)
 			.values({
-				...data,
+				companyId: data.companyId,
+				name: data.name,
+				description: data.description,
+				duration: data.duration,
 				slug,
 				price: data.price || 0,
 				color: data.color || "#3b82f6",
 				requiresConfirmation: data.requiresConfirmation || false,
 				bufferTimeBefore: data.bufferTimeBefore || 0,
 				bufferTimeAfter: data.bufferTimeAfter || 0,
+				maxBookingsPerDay: data.maxBookingsPerDay,
 			})
 			.returning();
 
 		await notification.success(
 			"Meeting Type Created",
-			`"${data.name}" meeting type has been created successfully.`,
+			`"${data.name}" meeting type has been created successfully for ${company.name}.`,
 			{ userId: data.userId }
 		);
 
@@ -55,14 +76,26 @@ export class SchedulingManager {
 		userId: string,
 		data: Partial<typeof meetingTypes.$inferInsert>
 	) {
+		// First verify the user owns the company that owns this meeting type
+		const meetingType = await db.query.meetingTypes.findFirst({
+			where: eq(meetingTypes.id, meetingTypeId),
+			with: {
+				company: true,
+			},
+		});
+
+		if (!meetingType || meetingType.company.userId !== userId) {
+			throw new Error("Meeting type not found or unauthorized");
+		}
+
 		if (data.name) {
-			data.slug = await this.generateUniqueSlug(data.name, userId, meetingTypeId);
+			data.slug = await this.generateUniqueSlug(data.name, meetingType.companyId, meetingTypeId);
 		}
 
 		const updated = await db
 			.update(meetingTypes)
 			.set({ ...data, updatedAt: new Date() })
-			.where(and(eq(meetingTypes.id, meetingTypeId), eq(meetingTypes.userId, userId)))
+			.where(eq(meetingTypes.id, meetingTypeId))
 			.returning();
 
 		if (updated.length === 0) {
@@ -80,10 +113,22 @@ export class SchedulingManager {
 
 	// Delete meeting type
 	async deleteMeetingType(meetingTypeId: string, userId: string) {
+		// First verify the user owns the company that owns this meeting type
+		const meetingType = await db.query.meetingTypes.findFirst({
+			where: eq(meetingTypes.id, meetingTypeId),
+			with: {
+				company: true,
+			},
+		});
+
+		if (!meetingType || meetingType.company.userId !== userId) {
+			throw new Error("Meeting type not found or unauthorized");
+		}
+
 		const deleted = await db
 			.update(meetingTypes)
 			.set({ isActive: false, updatedAt: new Date() })
-			.where(and(eq(meetingTypes.id, meetingTypeId), eq(meetingTypes.userId, userId)))
+			.where(eq(meetingTypes.id, meetingTypeId))
 			.returning();
 
 		if (deleted.length === 0) {
@@ -99,22 +144,46 @@ export class SchedulingManager {
 		return deleted[0];
 	}
 
-	// Get user's meeting types
-	async getMeetingTypes(userId: string) {
+	// Get company's meeting types
+	async getCompanyMeetingTypes(companyId: string) {
 		return await db.query.meetingTypes.findMany({
-			where: and(eq(meetingTypes.userId, userId), eq(meetingTypes.isActive, true)),
+			where: and(eq(meetingTypes.companyId, companyId), eq(meetingTypes.isActive, true)),
 			orderBy: [asc(meetingTypes.createdAt)],
 		});
 	}
 
-	// Get public meeting type by slug
-	async getPublicMeetingType(userId: string, slug: string) {
+	// Get user's meeting types (from all their companies)
+	async getMeetingTypes(userId: string) {
+		const userCompanies = await db.query.companies.findMany({
+			where: eq(companies.userId, userId),
+		});
+
+		const companyIds = userCompanies.map((c) => c.id);
+
+		if (companyIds.length === 0) {
+			return [];
+		}
+
+		return await db.query.meetingTypes.findMany({
+			where: and(eq(meetingTypes.isActive, true), inArray(meetingTypes.companyId, companyIds)),
+			orderBy: [asc(meetingTypes.createdAt)],
+			with: {
+				company: true,
+			},
+		});
+	}
+
+	// Get public meeting type by company and slug
+	async getPublicMeetingType(companyId: string, slug: string) {
 		const meetingType = await db.query.meetingTypes.findFirst({
 			where: and(
-				eq(meetingTypes.userId, userId),
+				eq(meetingTypes.companyId, companyId),
 				eq(meetingTypes.slug, slug),
 				eq(meetingTypes.isActive, true)
 			),
+			with: {
+				company: true,
+			},
 		});
 
 		if (!meetingType) {
@@ -124,8 +193,9 @@ export class SchedulingManager {
 		return meetingType;
 	}
 
-	// Set user availability
+	// Set company availability
 	async setAvailability(
+		companyId: string,
 		userId: string,
 		availabilityData: {
 			dayOfWeek: number;
@@ -133,14 +203,23 @@ export class SchedulingManager {
 			endTime: string;
 		}[]
 	) {
+		// Verify user owns the company
+		const company = await db.query.companies.findFirst({
+			where: and(eq(companies.id, companyId), eq(companies.userId, userId)),
+		});
+
+		if (!company) {
+			throw new Error("Company not found or unauthorized");
+		}
+
 		// Delete existing availability
-		await db.delete(availability).where(eq(availability.userId, userId));
+		await db.delete(availability).where(eq(availability.companyId, companyId));
 
 		// Insert new availability
 		if (availabilityData.length > 0) {
 			await db.insert(availability).values(
 				availabilityData.map((avail) => ({
-					userId,
+					companyId,
 					...avail,
 				}))
 			);
@@ -148,42 +227,45 @@ export class SchedulingManager {
 
 		await notification.success(
 			"Availability Updated",
-			"Your availability has been updated successfully.",
+			`Availability for ${company.name} has been updated successfully.`,
 			{ userId }
 		);
 	}
 
-	// Get user availability
-	async getAvailability(userId: string) {
+	// Get company availability
+	async getAvailability(companyId: string) {
 		return await db.query.availability.findMany({
-			where: and(eq(availability.userId, userId), eq(availability.isActive, true)),
+			where: and(eq(availability.companyId, companyId), eq(availability.isActive, true)),
 			orderBy: [asc(availability.dayOfWeek), asc(availability.startTime)],
 		});
 	}
 
 	// Get available slots for booking
-	async getAvailableSlots(userId: string, meetingTypeId: string, date: Date) {
+	async getAvailableSlots(companyId: string, meetingTypeId: string, date: Date) {
 		const meetingType = await db.query.meetingTypes.findFirst({
 			where: and(
 				eq(meetingTypes.id, meetingTypeId),
-				eq(meetingTypes.userId, userId),
+				eq(meetingTypes.companyId, companyId),
 				eq(meetingTypes.isActive, true)
 			),
+			with: {
+				company: true,
+			},
 		});
 
 		if (!meetingType) {
 			throw new Error("Meeting type not found");
 		}
 
-		// Check if user has calendar connected
-		const isConnected = await this.calendarManager.isCalendarConnected(userId);
+		// Check if company has calendar connected (using company owner's calendar for now)
+		const isConnected = await this.calendarManager.isCalendarConnected(meetingType.company.userId);
 		if (!isConnected) {
 			throw new Error("Calendar not connected");
 		}
 
-		// Get available slots from calendar manager
+		// Get available slots from calendar manager (using company owner's calendar)
 		const slots = await this.calendarManager.getAvailableSlots(
-			userId,
+			meetingType.company.userId,
 			date,
 			meetingType.duration +
 				(meetingType.bufferTimeBefore || 0) +
@@ -208,49 +290,20 @@ export class SchedulingManager {
 		startTime: Date;
 		answers?: { questionId: string; answer: string }[];
 	}) {
-		// Get meeting type
 		const meetingType = await db.query.meetingTypes.findFirst({
-			where: and(
-				eq(meetingTypes.id, data.meetingTypeId),
-				eq(meetingTypes.userId, data.hostUserId),
-				eq(meetingTypes.isActive, true)
-			),
+			where: and(eq(meetingTypes.id, data.meetingTypeId), eq(meetingTypes.isActive, true)),
+			with: {
+				company: true,
+			},
 		});
 
 		if (!meetingType) {
 			throw new Error("Meeting type not found");
 		}
 
-		// Calculate end time
 		const endTime = addMinutes(data.startTime, meetingType.duration);
 
-		// Check if slot is still available
-		const availableSlots = await this.getAvailableSlots(
-			data.hostUserId,
-			data.meetingTypeId,
-			data.startTime
-		);
-
-		const isSlotAvailable = availableSlots.some(
-			(slot) => slot.start.getTime() === data.startTime.getTime()
-		);
-
-		if (!isSlotAvailable) {
-			throw new Error("Selected time slot is no longer available");
-		}
-
-		// Create calendar event
-		const googleEventId = await this.calendarManager.createEvent({
-			hostUserId: data.hostUserId,
-			guestName: data.guestName,
-			guestEmail: data.guestEmail,
-			startTime: data.startTime,
-			endTime,
-			meetingType,
-			notes: data.guestNotes,
-		});
-
-		// Create booking in database
+		// Create the booking
 		const booking = await db
 			.insert(bookings)
 			.values({
@@ -262,12 +315,10 @@ export class SchedulingManager {
 				guestNotes: data.guestNotes,
 				startTime: data.startTime,
 				endTime,
-				googleEventId,
-				status: meetingType.requiresConfirmation ? "pending" : "confirmed",
 			})
 			.returning();
 
-		// Save custom question answers
+		// Save answers if provided
 		if (data.answers && data.answers.length > 0) {
 			await db.insert(bookingAnswers).values(
 				data.answers.map((answer) => ({
@@ -278,10 +329,31 @@ export class SchedulingManager {
 			);
 		}
 
-		// Send notifications
+		// Create calendar event
+		try {
+			const eventId = await this.calendarManager.createEvent({
+				hostUserId: meetingType.company.userId,
+				guestName: data.guestName,
+				guestEmail: data.guestEmail,
+				startTime: data.startTime,
+				endTime,
+				meetingType,
+				notes: data.guestNotes,
+			});
+
+			// Update booking with Google event ID
+			await db
+				.update(bookings)
+				.set({ googleEventId: eventId })
+				.where(eq(bookings.id, booking[0].id));
+		} catch (error) {
+			console.error("Failed to create calendar event:", error);
+			// Don't fail the booking if calendar creation fails
+		}
+
 		await notification.success(
-			"Meeting Booked",
-			`Your meeting "${meetingType.name}" has been scheduled for ${format(data.startTime, "PPP p")}.`,
+			"Booking Confirmed",
+			`Your meeting "${meetingType.name}" has been scheduled for ${format(data.startTime, "PPP 'at' p")}.`,
 			{ userId: data.hostUserId }
 		);
 
@@ -291,27 +363,18 @@ export class SchedulingManager {
 	// Cancel booking
 	async cancelBooking(bookingId: string, userId: string, reason?: string) {
 		const booking = await db.query.bookings.findFirst({
-			where: and(eq(bookings.id, bookingId), eq(bookings.hostUserId, userId)),
+			where: eq(bookings.id, bookingId),
 			with: {
-				meetingType: true,
+				meetingType: {
+					with: {
+						company: true,
+					},
+				},
 			},
 		});
 
-		if (!booking) {
+		if (!booking || booking.meetingType.company.userId !== userId) {
 			throw new Error("Booking not found or unauthorized");
-		}
-
-		if (booking.status === "cancelled") {
-			throw new Error("Booking is already cancelled");
-		}
-
-		// Cancel calendar event
-		if (booking.googleEventId) {
-			try {
-				await this.calendarManager.cancelEvent(userId, booking.googleEventId);
-			} catch (error) {
-				console.error("Failed to cancel calendar event:", error);
-			}
 		}
 
 		// Update booking status
@@ -325,59 +388,116 @@ export class SchedulingManager {
 			.where(eq(bookings.id, bookingId))
 			.returning();
 
-		await notification.warning(
-			"Meeting Cancelled",
-			`Your meeting "${booking.meetingType.name}" has been cancelled.`,
+		// Cancel calendar event
+		if (booking.googleEventId) {
+			try {
+				await this.calendarManager.cancelEvent(
+					booking.meetingType.company.userId,
+					booking.googleEventId
+				);
+			} catch (error) {
+				console.error("Failed to cancel calendar event:", error);
+			}
+		}
+
+		await notification.info(
+			"Booking Cancelled",
+			`The meeting "${booking.meetingType.name}" scheduled for ${format(booking.startTime, "PPP 'at' p")} has been cancelled.`,
 			{ userId }
 		);
 
 		return cancelled[0];
 	}
 
-	// Get user's bookings
+	// Get bookings for user's companies
 	async getBookings(userId: string, status?: string) {
-		const whereConditions = [eq(bookings.hostUserId, userId)];
+		const userCompanies = await db.query.companies.findMany({
+			where: eq(companies.userId, userId),
+		});
 
-		if (status) {
-			whereConditions.push(eq(bookings.status, status));
+		const companyIds = userCompanies.map((c) => c.id);
+
+		if (companyIds.length === 0) {
+			return [];
+		}
+
+		// Get meeting types for user's companies first
+		const userMeetingTypes = await db.query.meetingTypes.findMany({
+			where: inArray(meetingTypes.companyId, companyIds),
+		});
+
+		const meetingTypeIds = userMeetingTypes.map((mt) => mt.id);
+
+		if (meetingTypeIds.length === 0) {
+			return [];
 		}
 
 		return await db.query.bookings.findMany({
-			where: and(...whereConditions),
-			with: {
-				meetingType: true,
-			},
+			where: and(
+				inArray(bookings.meetingTypeId, meetingTypeIds),
+				status ? eq(bookings.status, status) : undefined
+			),
 			orderBy: [desc(bookings.startTime)],
+			with: {
+				meetingType: {
+					with: {
+						company: true,
+					},
+				},
+			},
 		});
 	}
 
-	// Get upcoming bookings
+	// Get upcoming bookings for user's companies
 	async getUpcomingBookings(userId: string) {
+		const userCompanies = await db.query.companies.findMany({
+			where: eq(companies.userId, userId),
+		});
+
+		const companyIds = userCompanies.map((c) => c.id);
+
+		if (companyIds.length === 0) {
+			return [];
+		}
+
+		// Get meeting types for user's companies first
+		const userMeetingTypes = await db.query.meetingTypes.findMany({
+			where: inArray(meetingTypes.companyId, companyIds),
+		});
+
+		const meetingTypeIds = userMeetingTypes.map((mt) => mt.id);
+
+		if (meetingTypeIds.length === 0) {
+			return [];
+		}
+
 		return await db.query.bookings.findMany({
 			where: and(
-				eq(bookings.hostUserId, userId),
+				inArray(bookings.meetingTypeId, meetingTypeIds),
 				eq(bookings.status, "confirmed"),
 				gte(bookings.startTime, new Date())
 			),
-			with: {
-				meetingType: true,
-			},
 			orderBy: [asc(bookings.startTime)],
+			with: {
+				meetingType: {
+					with: {
+						company: true,
+					},
+				},
+			},
 		});
 	}
 
-	// Helper: Generate URL-friendly slug
 	private generateSlug(name: string): string {
 		return name
 			.toLowerCase()
 			.replace(/[^a-z0-9]+/g, "-")
-			.replace(/^-+|-+$/g, "");
+			.replace(/(^-|-$)/g, "");
 	}
 
-	// Helper: Generate unique slug for user
 	private async generateUniqueSlug(
 		name: string,
-		userId: string,
+		companyId: string,
 		excludeId?: string
 	): Promise<string> {
 		const baseSlug = this.generateSlug(name);
@@ -385,26 +505,24 @@ export class SchedulingManager {
 		let counter = 1;
 
 		while (true) {
-			const whereConditions = [eq(meetingTypes.userId, userId), eq(meetingTypes.slug, slug)];
-
-			if (excludeId) {
-				whereConditions.push(ne(meetingTypes.id, excludeId));
-			}
-
 			const existing = await db.query.meetingTypes.findFirst({
-				where: and(...whereConditions),
+				where: and(
+					eq(meetingTypes.companyId, companyId),
+					eq(meetingTypes.slug, slug),
+					excludeId ? ne(meetingTypes.id, excludeId) : undefined
+				),
 			});
 
 			if (!existing) {
 				return slug;
 			}
 
-			counter++;
 			slug = `${baseSlug}-${counter}`;
+			counter++;
 		}
 	}
 
-	// Add custom questions to meeting type
+	// Add questions to meeting type
 	async addMeetingTypeQuestions(
 		meetingTypeId: string,
 		userId: string,
@@ -415,19 +533,22 @@ export class SchedulingManager {
 			isRequired: boolean;
 		}[]
 	) {
-		// Verify ownership
+		// Verify user owns the company that owns this meeting type
 		const meetingType = await db.query.meetingTypes.findFirst({
-			where: and(eq(meetingTypes.id, meetingTypeId), eq(meetingTypes.userId, userId)),
+			where: eq(meetingTypes.id, meetingTypeId),
+			with: {
+				company: true,
+			},
 		});
 
-		if (!meetingType) {
+		if (!meetingType || meetingType.company.userId !== userId) {
 			throw new Error("Meeting type not found or unauthorized");
 		}
 
 		// Delete existing questions
 		await db.delete(bookingQuestions).where(eq(bookingQuestions.meetingTypeId, meetingTypeId));
 
-		// Add new questions
+		// Insert new questions
 		if (questions.length > 0) {
 			await db.insert(bookingQuestions).values(
 				questions.map((q, index) => ({
@@ -444,7 +565,7 @@ export class SchedulingManager {
 		return true;
 	}
 
-	// Get meeting type questions
+	// Get questions for meeting type
 	async getMeetingTypeQuestions(meetingTypeId: string) {
 		return await db.query.bookingQuestions.findMany({
 			where: eq(bookingQuestions.meetingTypeId, meetingTypeId),
