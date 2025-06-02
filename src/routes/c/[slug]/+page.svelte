@@ -37,7 +37,7 @@
 					/>
 				{:else}
 					<div
-						class="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-600 font-semibold text-white"
+						class="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-900 font-semibold text-white"
 					>
 						{data.company.name.charAt(0).toUpperCase()}
 					</div>

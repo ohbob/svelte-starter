@@ -1,3 +1,4 @@
+import { getAnalytics } from "$lib/server/analytics";
 import { auth } from "$lib/server/auth";
 import { db } from "$lib/server/db";
 import { companies } from "$lib/server/schema";
@@ -9,9 +10,24 @@ export const load: PageServerLoad = async ({ parent }) => {
 	// Get data from parent layout
 	const { currentCompany } = await parent();
 
-	// Return company-dependent data to ensure page refreshes when company changes
+	// Load analytics data for current company if it exists
+	let analyticsData = null;
+	let todaysViews = 0;
+
+	if (currentCompany?.id) {
+		try {
+			analyticsData = await getAnalytics(currentCompany.id as string);
+			// You can add more dashboard-specific data here
+		} catch (error) {
+			console.warn("Failed to load analytics data for dashboard:", error);
+			// Continue without analytics data rather than failing
+		}
+	}
+
 	return {
 		currentCompanyId: currentCompany?.id || null,
+		analytics: analyticsData,
+		todaysViews,
 		services: [], // Placeholder for future services implementation
 	};
 };

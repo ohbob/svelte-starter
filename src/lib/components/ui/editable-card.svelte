@@ -3,6 +3,7 @@
 	import { toast } from "svelte-sonner";
 	import { enhance } from "$app/forms";
 	import { page } from "$app/stores";
+	import { invalidateAll } from "$app/navigation";
 
 	let {
 		label,
@@ -47,6 +48,8 @@
 			if (result.type === "success") {
 				lastSaved = new Date();
 				toast.success(`${label} updated`);
+				// Invalidate all data to refresh layout (especially company selector)
+				await invalidateAll();
 			} else if (result.type === "failure") {
 				toast.error(result.data?.error || "Failed to update");
 			}

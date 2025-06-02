@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from "$app/stores";
 
-	let { children, data } = $props();
+	let { children } = $props();
 
 	const tabs = [
 		{ name: "Overview", href: "/app/analytics", icon: "overview" },
@@ -50,11 +50,6 @@
 						</svg>
 					{/if}
 					{tab.name}
-					{#if tab.name === "Referrers" && data.analytics.topReferrers.length > 0}
-						<span class="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-							{data.analytics.topReferrers.length}
-						</span>
-					{/if}
 				</a>
 			{/each}
 		</nav>

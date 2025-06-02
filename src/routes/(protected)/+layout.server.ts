@@ -15,9 +15,12 @@ export const load: LayoutServerLoad = async ({ request, cookies }) => {
 		};
 	}
 
-	// Get user's companies
+	// Get user's companies - ONLY id and name for selector
 	const userCompanies = await db
-		.select()
+		.select({
+			id: companies.id,
+			name: companies.name,
+		})
 		.from(companies)
 		.where(eq(companies.userId, session.user.id));
 

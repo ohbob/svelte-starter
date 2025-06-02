@@ -1,10 +1,37 @@
 <script lang="ts">
 	import AnalyticsHistogram from "$lib/components/AnalyticsHistogram.svelte";
+	import { invalidateAll } from "$app/navigation";
 
 	let { data } = $props();
 
-	// Ensure we have valid analytics data
-	const analyticsData = data.analytics || {};
+	// Derived values from data (automatically reactive)
+	const analyticsData = $derived(data.analytics || {});
+	const currentCompanyId = $derived(data.currentCompanyId);
+	const services = $derived(data.services || []);
+
+	// Test function to add analytics data
+	const addTestData = async () => {
+		if (!currentCompanyId) return;
+
+		try {
+			const response = await fetch("/api/debug-add-analytics", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					companyId: currentCompanyId,
+					views: 10,
+				}),
+			});
+
+			if (response.ok) {
+				// Refresh the page data
+				await invalidateAll();
+				console.log("✅ Test analytics data added and page refreshed");
+			}
+		} catch (error) {
+			console.error("❌ Failed to add test data:", error);
+		}
+	};
 </script>
 
 <div class="p-6">
@@ -81,7 +108,7 @@
 				</div>
 				<div class="ml-4">
 					<div class="text-sm font-medium text-gray-500">Total Services</div>
-					<div class="text-2xl font-bold text-gray-900">{data.services?.length || 0}</div>
+					<div class="text-2xl font-bold text-gray-900">{services.length || 0}</div>
 				</div>
 			</div>
 		</div>
@@ -107,7 +134,7 @@
 				<div class="ml-4">
 					<div class="text-sm font-medium text-gray-500">Active Services</div>
 					<div class="text-2xl font-bold text-gray-900">
-						{data.services?.filter((s) => s.isActive).length || 0}
+						{services.filter((s) => s.isActive).length || 0}
 					</div>
 				</div>
 			</div>

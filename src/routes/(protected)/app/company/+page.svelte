@@ -3,12 +3,18 @@
 	import { toast } from "svelte-sonner";
 	import { enhance } from "$app/forms";
 	import { browser } from "$app/environment";
+	import { PUBLIC_BASE_URL } from "$env/static/public";
 	import EditableCard from "$lib/components/ui/editable-card.svelte";
+
 	let { data, form } = $props();
+
+	// Extract domain from PUBLIC_BASE_URL for display
+	const siteUrl = PUBLIC_BASE_URL.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
 	// Individual field states for debounced saving
 	let fields = $state({
 		name: { value: "", saving: false, lastSaved: null },
-		slug: { value: "", saving: false, lastSaved: null },
+		slug: { value: "", saving: false, lastSaved: null, debounceTimer: null },
 		slugInput: "", // Separate input value for natural typing
 		email: { value: "", saving: false, lastSaved: null },
 		phone: { value: "", saving: false, lastSaved: null },
@@ -101,23 +107,48 @@
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<div class="text-sm font-medium text-gray-500">Company URL</div>
-					<EditableCard
-						label=""
+					<input
+						type="text"
 						bind:value={fields.slug.value}
-						bind:saving={fields.slug.saving}
-						bind:lastSaved={fields.slug.lastSaved}
-						placeholder="company-url"
-						fieldName="slug"
-						onInput={(value) => {
-							// Allow natural typing with spaces that get converted to hyphens
-							const formatted = value
+						oninput={(e) => {
+							const formatted = e.target.value
 								.toLowerCase()
 								.replace(/[^a-z0-9-\s]/g, "")
 								.replace(/\s+/g, "-")
 								.replace(/-+/g, "-")
 								.replace(/^-+|-+$/g, "");
 							fields.slug.value = formatted;
+
+							// Auto-save with debounce
+							if (fields.slug.debounceTimer) {
+								clearTimeout(fields.slug.debounceTimer);
+							}
+							fields.slug.debounceTimer = setTimeout(async () => {
+								fields.slug.saving = true;
+								try {
+									const formData = new FormData();
+									formData.append("field", "slug");
+									formData.append("value", formatted);
+
+									const response = await fetch("?/updateCompany", {
+										method: "POST",
+										body: formData,
+										headers: { "x-sveltekit-action": "true" },
+									});
+
+									const result = await response.json();
+									if (result.type === "success") {
+										fields.slug.lastSaved = new Date();
+									}
+								} catch (error) {
+									console.error("Failed to save slug:", error);
+								} finally {
+									fields.slug.saving = false;
+								}
+							}, 1000);
 						}}
+						placeholder="company-url"
+						class="w-full border-none bg-transparent p-0 text-lg font-semibold text-gray-900 placeholder-gray-400 outline-none focus:ring-0"
 					/>
 					<div class="mt-1 text-xs text-gray-500">
 						{#if fields.slug.value}
@@ -127,12 +158,17 @@
 								rel="noopener noreferrer"
 								class="text-blue-600 hover:text-blue-800 hover:underline"
 							>
-								yoursite.com/c/{fields.slug.value}
+								{siteUrl}/c/{fields.slug.value}
 							</a>
 						{:else}
-							yoursite.com/c/company-url
+							{siteUrl}/c/company-url
 						{/if}
 					</div>
+					{#if fields.slug.saving}
+						<div class="mt-1 text-xs text-blue-600">Saving...</div>
+					{:else if fields.slug.lastSaved}
+						<div class="mt-1 text-xs text-green-600">✓ Saved</div>
+					{/if}
 				</div>
 				<div class="ml-4 flex h-8 w-8 items-center justify-center rounded-lg bg-green-100">
 					<span class="text-green-600">{@html icons.link}</span>

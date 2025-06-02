@@ -117,7 +117,7 @@
 						>
 							<div class="flex items-center gap-3">
 								<div
-									class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-sm font-semibold text-blue-600"
+									class="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-900 text-sm font-semibold text-white"
 								>
 									{company.name.charAt(0).toUpperCase()}
 								</div>

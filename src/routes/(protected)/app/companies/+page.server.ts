@@ -5,12 +5,15 @@ import { redirect } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 import type { PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({ request }) => {
+export const load: PageServerLoad = async ({ request, parent }) => {
 	const session = await auth.api.getSession({ headers: request.headers });
 
 	if (!session) {
 		throw redirect(302, "/");
 	}
+
+	// Get current company from parent for highlighting
+	const { currentCompany } = await parent();
 
 	try {
 		// Get user's companies directly
@@ -22,11 +25,13 @@ export const load: PageServerLoad = async ({ request }) => {
 
 		return {
 			companies: userCompanies,
+			currentCompany, // Pass through for highlighting
 		};
 	} catch (error) {
 		console.error("Error loading companies:", error);
 		return {
 			companies: [],
+			currentCompany,
 		};
 	}
 };

@@ -6,6 +6,10 @@
 
 	let { companies = [], currentCompany = null } = $props();
 
+	// Make company data reactive using $derived
+	const reactiveCompanies = $derived(companies || []);
+	const reactiveCurrentCompany = $derived(currentCompany);
+
 	let showDropdown = $state(false);
 	let showCreateModal = $state(false);
 	let isSubmitting = $state(false);
@@ -58,13 +62,13 @@
 		class="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
 	>
 		<div class="flex items-center gap-2">
-			{#if currentCompany}
+			{#if reactiveCurrentCompany}
 				<div
-					class="flex h-6 w-6 items-center justify-center rounded bg-blue-100 text-xs font-semibold text-blue-600"
+					class="flex h-6 w-6 items-center justify-center rounded bg-gray-900 text-xs font-semibold text-white"
 				>
-					{currentCompany.name.charAt(0).toUpperCase()}
+					{reactiveCurrentCompany.name.charAt(0).toUpperCase()}
 				</div>
-				<span class="max-w-32 truncate">{currentCompany.name}</span>
+				<span class="w-32 truncate">{reactiveCurrentCompany.name}</span>
 			{:else}
 				<div
 					class="flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-xs font-semibold text-gray-400"
@@ -89,10 +93,10 @@
 		<div
 			class="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
 		>
-			{#if companies.length === 0}
+			{#if reactiveCompanies.length === 0}
 				<div class="px-3 py-2 text-sm text-gray-500">No companies yet</div>
 			{:else}
-				{#each companies as company}
+				{#each reactiveCompanies as company}
 					<form
 						method="POST"
 						action="/app?/selectCompany"
@@ -116,24 +120,21 @@
 						<button
 							type="submit"
 							disabled={isSubmitting}
-							class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50 {currentCompany?.id ===
+							class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50 {reactiveCurrentCompany?.id ===
 							company.id
 								? 'bg-blue-50 text-blue-700'
 								: 'text-gray-700'} disabled:opacity-50"
 							aria-label="Select {company.name}"
 						>
 							<div
-								class="flex h-8 w-8 items-center justify-center rounded bg-blue-100 text-sm font-semibold text-blue-600"
+								class="flex h-8 w-8 items-center justify-center rounded bg-gray-900 text-sm font-semibold text-white"
 							>
 								{company.name.charAt(0).toUpperCase()}
 							</div>
 							<div class="min-w-0 flex-1">
 								<div class="truncate font-medium">{company.name}</div>
-								{#if company.description}
-									<div class="truncate text-xs text-gray-500">{company.description}</div>
-								{/if}
 							</div>
-							{#if currentCompany?.id === company.id}
+							{#if reactiveCurrentCompany?.id === company.id}
 								<svg
 									class="h-4 w-4 text-blue-600"
 									fill="currentColor"

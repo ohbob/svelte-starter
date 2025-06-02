@@ -1,5 +1,29 @@
 <script lang="ts">
 	let { data } = $props();
+
+	// Reactive state for analytics data from page load
+	let analyticsData = $state({
+		totalViews: 0,
+		recentViews: 0,
+		previousPeriodViews: 0,
+		todayViews: 0,
+		dailyViews: [],
+		topReferrers: [],
+	});
+	let userData = $state(null);
+
+	// Update analytics data when page data changes
+	$effect(() => {
+		analyticsData = data?.analytics || {
+			totalViews: 0,
+			recentViews: 0,
+			previousPeriodViews: 0,
+			todayViews: 0,
+			dailyViews: [],
+			topReferrers: [],
+		};
+		userData = data?.user;
+	});
 </script>
 
 <!-- Referrers Content -->
@@ -11,7 +35,7 @@
 		</div>
 	</div>
 	<div class="p-6">
-		{#if data.analytics.topReferrers.length > 0}
+		{#if analyticsData.topReferrers.length > 0}
 			<div class="overflow-x-auto">
 				<table class="w-full">
 					<thead class="border-b border-gray-200">
@@ -24,7 +48,7 @@
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-gray-200">
-						{#each data.analytics.topReferrers as referrer, index}
+						{#each analyticsData.topReferrers as referrer, index}
 							<tr class="hover:bg-gray-50">
 								<td class="px-4 py-4">
 									<div class="flex items-center gap-3">
@@ -70,11 +94,11 @@
 										<div class="h-2 w-16 rounded-full bg-gray-200">
 											<div
 												class="h-2 rounded-full bg-blue-500"
-												style:width="{(referrer.views / data.analytics.recentViews) * 100}%"
+												style:width="{(referrer.views / analyticsData.recentViews) * 100}%"
 											></div>
 										</div>
 										<span class="w-10 text-right text-sm text-gray-500">
-											{Math.round((referrer.views / data.analytics.recentViews) * 100)}%
+											{Math.round((referrer.views / analyticsData.recentViews) * 100)}%
 										</span>
 									</div>
 								</td>
@@ -102,9 +126,9 @@
 				<p class="text-sm text-gray-500">
 					Traffic sources will appear here when people visit your portfolio from other sites.
 				</p>
-				{#if data.user?.customUrl}
+				{#if userData?.customUrl}
 					<a
-						href="/u/{data.user.customUrl}"
+						href="/u/{userData.customUrl}"
 						target="_blank"
 						class="mt-4 inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
 					>

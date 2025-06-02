@@ -1,118 +1,109 @@
 <script>
-	/**
-	 * @typedef {Object} DailyView
-	 * @property {string} date
-	 * @property {number} views
-	 */
-
-	/**
-	 * @typedef {Object} Referrer
-	 * @property {string} referrer
-	 * @property {string} domain
-	 * @property {string} path
-	 * @property {string} views
-	 */
-
-	/**
-	 * @type {DailyView[]}
-	 */
 	let { dailyViews, topReferrers } = $props();
 
 	// Color palette for different sources
 	const sourceColors = [
-		"#ef4444", // red-500
-		"#f97316", // orange-500
-		"#eab308", // yellow-500
-		"#22c55e", // green-500
-		"#06b6d4", // cyan-500
-		"#3b82f6", // blue-500
-		"#8b5cf6", // violet-500
-		"#ec4899", // pink-500
-		"#64748b", // slate-500
-		"#6b7280", // gray-500
+		"#ef4444",
+		"#f97316",
+		"#eab308",
+		"#22c55e",
+		"#06b6d4",
+		"#3b82f6",
+		"#8b5cf6",
+		"#ec4899",
+		"#64748b",
+		"#6b7280",
 	];
 
-	// Prepare histogram data for last 30 days
-	const today = new Date();
-	const thirtyDaysAgo = new Date(today);
-	thirtyDaysAgo.setDate(today.getDate() - 29);
+	// Reactive state that updates when props change
+	let histogramDays = $state([]);
+	let maxViews = $state(1);
+	let yAxisLabels = $state([]);
+	let domainColors = $state(new Map());
 
-	// Get top source domains for color mapping
-	const topDomains = topReferrers
-		.slice(0, 8)
-		.map((r) => r.domain)
-		.filter((domain, index, arr) => arr.indexOf(domain) === index);
+	// Update chart data when props change
+	$effect(() => {
+		// Get top domains for color mapping
+		const topDomains = topReferrers
+			.slice(0, 8)
+			.map((r) => r.domain)
+			.filter((domain, index, arr) => arr.indexOf(domain) === index);
 
-	// Create domain to color mapping
-	const domainColors = new Map();
-	topDomains.forEach((domain, index) => {
-		domainColors.set(domain, sourceColors[index % sourceColors.length]);
-	});
-	domainColors.set("direct", "#6b7280"); // gray for direct traffic
+		// Create domain to color mapping
+		const colorMap = new Map();
+		topDomains.forEach((domain, index) => {
+			colorMap.set(domain, sourceColors[index % sourceColors.length]);
+		});
+		colorMap.set("direct", "#6b7280");
+		domainColors = colorMap;
 
-	// Create a map of date string -> views for quick lookup
-	const viewsMap = new Map();
-	dailyViews.forEach((item) => {
-		const date = new Date(item.date);
-		const dateKey = date.toISOString().split("T")[0];
-		viewsMap.set(dateKey, item.views);
-	});
+		// Create views map
+		const viewsMap = new Map();
+		dailyViews.forEach((item) => {
+			const date = new Date(item.date);
+			const dateKey = date.toISOString().split("T")[0];
+			viewsMap.set(dateKey, item.views);
+		});
 
-	// Generate histogram data with source breakdown
-	let histogramDays = [];
-	for (let i = 0; i < 30; i++) {
-		const currentDate = new Date(thirtyDaysAgo);
-		currentDate.setDate(thirtyDaysAgo.getDate() + i);
+		// Generate histogram data
+		const today = new Date();
+		const thirtyDaysAgo = new Date(today);
+		thirtyDaysAgo.setDate(today.getDate() - 29);
 
-		const dateKey = currentDate.toISOString().split("T")[0];
-		const isToday = currentDate.toDateString() === today.toDateString();
-		const isFuture = currentDate > today;
-		const totalViews = viewsMap.get(dateKey) || 0;
+		const days = [];
+		for (let i = 0; i < 30; i++) {
+			const currentDate = new Date(thirtyDaysAgo);
+			currentDate.setDate(thirtyDaysAgo.getDate() + i);
 
-		// For demo purposes, simulate source breakdown
-		// In real implementation, you'd get this from your analytics data
-		const sources = [];
-		if (totalViews > 0) {
-			const sourceCount = Math.min(Math.ceil(totalViews / 20), topDomains.length);
-			let remainingViews = totalViews;
+			const dateKey = currentDate.toISOString().split("T")[0];
+			const isToday = currentDate.toDateString() === today.toDateString();
+			const isFuture = currentDate > today;
+			const totalViews = viewsMap.get(dateKey) || 0;
 
-			for (let j = 0; j < sourceCount && remainingViews > 0; j++) {
-				const domain = topDomains[j] || "direct";
-				const views =
-					j === sourceCount - 1
-						? remainingViews
-						: Math.floor(remainingViews * (0.3 + Math.random() * 0.4));
-				sources.push({
-					domain,
-					views: Math.max(1, views),
-					color: domainColors.get(domain),
-				});
-				remainingViews -= views;
+			// Simulate source breakdown
+			const sources = [];
+			if (totalViews > 0) {
+				const sourceCount = Math.min(Math.ceil(totalViews / 20), topDomains.length);
+				let remainingViews = totalViews;
+
+				for (let j = 0; j < sourceCount && remainingViews > 0; j++) {
+					const domain = topDomains[j] || "direct";
+					const views =
+						j === sourceCount - 1
+							? remainingViews
+							: Math.floor(remainingViews * (0.3 + Math.random() * 0.4));
+					sources.push({
+						domain,
+						views: Math.max(1, views),
+						color: colorMap.get(domain),
+					});
+					remainingViews -= views;
+				}
 			}
+
+			days.push({
+				day: currentDate.getDate(),
+				month: currentDate.getMonth(),
+				year: currentDate.getFullYear(),
+				totalViews,
+				sources,
+				isToday,
+				isFuture,
+				date: currentDate,
+				dateKey,
+				shortDate: currentDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+			});
 		}
 
-		histogramDays.push({
-			day: currentDate.getDate(),
-			month: currentDate.getMonth(),
-			year: currentDate.getFullYear(),
-			totalViews,
-			sources,
-			isToday,
-			isFuture,
-			date: currentDate,
-			dateKey,
-			shortDate: currentDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+		histogramDays = days;
+		maxViews = Math.max(...days.map((d) => d.totalViews), 1);
+
+		// Y-axis calculations
+		const yAxisSteps = 6;
+		const stepValue = maxViews / (yAxisSteps - 1);
+		yAxisLabels = Array.from({ length: yAxisSteps }, (_, i) => {
+			return Math.round(maxViews - i * stepValue);
 		});
-	}
-
-	// Get max views for scaling
-	let maxViews = Math.max(...histogramDays.map((d) => d.totalViews), 1);
-
-	// Y-axis scale calculations
-	let yAxisSteps = 6;
-	let stepValue = maxViews / (yAxisSteps - 1);
-	let yAxisLabels = Array.from({ length: yAxisSteps }, (_, i) => {
-		return Math.round(maxViews - i * stepValue);
 	});
 
 	// Smart number formatting
@@ -206,11 +197,13 @@
 
 			<!-- Legend -->
 			<div class="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
-				{#each topDomains.slice(0, 8) as domain, index}
-					<div class="flex items-center gap-2">
-						<div class="h-3 w-3 rounded" style:background-color={domainColors.get(domain)}></div>
-						<span class="truncate text-gray-600">{domain}</span>
-					</div>
+				{#each Array.from(domainColors.entries()).slice(0, 8) as [domain, color]}
+					{#if domain !== "direct"}
+						<div class="flex items-center gap-2">
+							<div class="h-3 w-3 rounded" style:background-color={color}></div>
+							<span class="truncate text-gray-600">{domain}</span>
+						</div>
+					{/if}
 				{/each}
 			</div>
 		{:else}

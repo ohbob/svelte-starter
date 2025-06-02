@@ -1,13 +1,15 @@
-import { getAnalytics } from "$lib/server/analytics";
 import { auth } from "$lib/server/auth";
+import { db } from "$lib/server/db";
+import { companies } from "$lib/server/schema";
 import { redirect } from "@sveltejs/kit";
+import { eq } from "drizzle-orm";
 import type { LayoutServerLoad } from "./$types";
 
 export const load: LayoutServerLoad = async ({ request, cookies, parent }) => {
 	console.log("🔄 App layout load triggered");
 
 	try {
-		// Get data from parent layout first - this ensures consistency
+		// Get minimal data from parent layout
 		const parentData = await parent();
 
 		// If parent doesn't have user data, redirect to signin
@@ -15,56 +17,34 @@ export const load: LayoutServerLoad = async ({ request, cookies, parent }) => {
 			throw redirect(302, "/signin");
 		}
 
-		// Use parent's company data as the source of truth
-		let currentCompany = parentData.selectedCompany;
-		let userCompanies = parentData.companies || [];
-
-		// If no companies exist, return minimal data
-		if (userCompanies.length === 0) {
-			return {
-				user: parentData.user,
-				companies: [],
-				currentCompany: null,
-				selectedCompanyId: null,
-				analytics: null,
-				todaysViews: 0,
-			};
-		}
-
-		// Ensure we have a selected company
-		if (!currentCompany && userCompanies.length > 0) {
-			currentCompany = userCompanies[0];
-			// Set cookie for consistency
-			cookies.set("selectedCompanyId", currentCompany.id, {
-				path: "/",
-				maxAge: 60 * 60 * 24 * 30, // 30 days
-				httpOnly: false,
-				secure: false,
-				sameSite: "lax",
-			});
-		}
-
-		// Load analytics data with error handling
-		let analyticsData = null;
-		let todaysViews = 0;
-
-		if (currentCompany) {
+		// If we have a selected company, get just its slug for the "View Company Page" link
+		let currentCompanySlug = null;
+		if (parentData.selectedCompany?.id) {
 			try {
-				analyticsData = await getAnalytics(currentCompany.id);
-			} catch (analyticsError) {
-				console.warn("Failed to load analytics data:", analyticsError);
-				// Continue without analytics data rather than failing completely
-				analyticsData = null;
+				const companySlug = await db
+					.select({ slug: companies.slug })
+					.from(companies)
+					.where(eq(companies.id, parentData.selectedCompany.id))
+					.limit(1);
+
+				if (companySlug.length > 0) {
+					currentCompanySlug = companySlug[0].slug;
+				}
+			} catch (error) {
+				console.warn("Failed to load company slug:", error);
+				// Continue without slug
 			}
 		}
 
+		// Just pass through the minimal data with slug added
 		return {
 			user: parentData.user,
-			companies: userCompanies,
-			currentCompany,
-			selectedCompanyId: currentCompany?.id || null,
-			analytics: analyticsData,
-			todaysViews,
+			companies: parentData.companies, // Only id and name
+			currentCompany: {
+				...parentData.selectedCompany, // id and name
+				slug: currentCompanySlug, // Add slug for "View Company Page" link
+			},
+			selectedCompanyId: parentData.selectedCompany?.id || null,
 		};
 	} catch (error: any) {
 		console.error("Error in app layout server load:", error);
@@ -90,8 +70,6 @@ export const load: LayoutServerLoad = async ({ request, cookies, parent }) => {
 				companies: [],
 				currentCompany: null,
 				selectedCompanyId: null,
-				analytics: null,
-				todaysViews: 0,
 			};
 		} catch (fallbackError) {
 			console.error("Fallback also failed:", fallbackError);

@@ -1,26 +1,54 @@
 <script lang="ts">
 	let { data } = $props();
 
-	// Prepare chart data
-	const chartData = data.analytics.dailyViews.map((item) => ({
-		date: new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-		fullDate: item.date,
-		views: item.views,
-	}));
+	// Reactive state for analytics data from page load
+	let analyticsData = $state({
+		totalViews: 0,
+		recentViews: 0,
+		previousPeriodViews: 0,
+		todayViews: 0,
+		dailyViews: [],
+		topReferrers: [],
+	});
+	let userData = $state(null);
 
-	// Get max views for chart scaling
-	const maxViews = Math.max(...chartData.map((d) => d.views), 1);
+	// Update analytics data when page data changes
+	$effect(() => {
+		analyticsData = data?.analytics || {
+			totalViews: 0,
+			recentViews: 0,
+			previousPeriodViews: 0,
+			todayViews: 0,
+			dailyViews: [],
+			topReferrers: [],
+		};
+		userData = data?.user;
+	});
 
-	// Calculate growth
-	const currentPeriodViews = data.analytics.recentViews;
-	const previousPeriodViews = data.analytics.previousPeriodViews || 0;
-	const growth =
-		previousPeriodViews > 0
-			? (((currentPeriodViews - previousPeriodViews) / previousPeriodViews) * 100).toFixed(1)
-			: currentPeriodViews > 0
-				? "100"
-				: "0";
-	const isGrowthPositive = parseFloat(growth) >= 0;
+	// Derived values (computed from analyticsData)
+	const chartData = $derived(
+		analyticsData.dailyViews.map((item) => ({
+			date: new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+			fullDate: item.date,
+			views: item.views,
+		}))
+	);
+
+	const maxViews = $derived(Math.max(...chartData.map((d) => d.views), 1));
+
+	const growth = $derived(
+		(() => {
+			const currentPeriodViews = analyticsData.recentViews;
+			const previousPeriodViews = analyticsData.previousPeriodViews || 0;
+			return previousPeriodViews > 0
+				? (((currentPeriodViews - previousPeriodViews) / previousPeriodViews) * 100).toFixed(1)
+				: currentPeriodViews > 0
+					? "100"
+					: "0";
+		})()
+	);
+
+	const isGrowthPositive = $derived(parseFloat(growth) >= 0);
 </script>
 
 <!-- Analytics Stats -->
@@ -29,7 +57,7 @@
 		<div class="flex items-center justify-between">
 			<div>
 				<div class="text-sm font-medium text-gray-500">Total Views</div>
-				<div class="text-2xl font-bold text-gray-900">{data.analytics.totalViews}</div>
+				<div class="text-2xl font-bold text-gray-900">{analyticsData.totalViews}</div>
 			</div>
 			<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100">
 				<svg class="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -54,7 +82,7 @@
 		<div class="flex items-center justify-between">
 			<div>
 				<div class="text-sm font-medium text-gray-500">Views (30 days)</div>
-				<div class="text-2xl font-bold text-gray-900">{data.analytics.recentViews}</div>
+				<div class="text-2xl font-bold text-gray-900">{analyticsData.recentViews}</div>
 				<div class="mt-1 flex items-center">
 					{#if isGrowthPositive}
 						<svg class="mr-1 h-3 w-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
@@ -95,9 +123,9 @@
 			<div>
 				<div class="text-sm font-medium text-gray-500">Avg. Daily Views</div>
 				<div class="text-2xl font-bold text-gray-900">
-					{chartData.length > 0 ? Math.round(data.analytics.recentViews / 30) : 0}
+					{chartData.length > 0 ? Math.round(analyticsData.recentViews / 30) : 0}
 				</div>
-				{#if chartData.length === 0 && data.analytics.totalViews > 0}
+				{#if chartData.length === 0 && analyticsData.totalViews > 0}
 					<div class="mt-1 text-xs text-gray-400">Will show after multiple days</div>
 				{/if}
 			</div>
@@ -118,7 +146,7 @@
 		<div class="flex items-center justify-between">
 			<div>
 				<div class="text-sm font-medium text-gray-500">Unique Referrers</div>
-				<div class="text-2xl font-bold text-gray-900">{data.analytics.topReferrers.length}</div>
+				<div class="text-2xl font-bold text-gray-900">{analyticsData.topReferrers.length}</div>
 			</div>
 			<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100">
 				<svg class="h-5 w-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -176,9 +204,9 @@
 					</svg>
 					<h3 class="mb-2 text-lg font-medium text-gray-900">No views yet</h3>
 					<p class="text-sm text-gray-500">Share your portfolio to start getting views!</p>
-					{#if data.user?.customUrl}
+					{#if userData?.customUrl}
 						<a
-							href="/u/{data.user.customUrl}"
+							href="/u/{userData.customUrl}"
 							target="_blank"
 							class="mt-4 inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
 						>
@@ -204,9 +232,9 @@
 			<h2 class="text-lg font-semibold text-gray-900">Quick Actions</h2>
 		</div>
 		<div class="space-y-3 p-6">
-			{#if data.user?.customUrl}
+			{#if userData?.customUrl}
 				<a
-					href="/u/{data.user.customUrl}"
+					href="/u/{userData.customUrl}"
 					target="_blank"
 					class="flex items-center justify-between rounded-lg border border-gray-200 p-3 transition-colors hover:border-gray-300"
 				>
