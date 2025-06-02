@@ -4,7 +4,7 @@ import type { RequestHandler } from "./$types";
 
 export const GET: RequestHandler = async ({ url }) => {
 	const code = url.searchParams.get("code");
-	const state = url.searchParams.get("state"); // companyId
+	const state = url.searchParams.get("state"); // userId
 	const error = url.searchParams.get("error");
 
 	console.log("Calendar callback received:", { code: !!code, state, error });
@@ -20,11 +20,11 @@ export const GET: RequestHandler = async ({ url }) => {
 	}
 
 	try {
-		console.log("Attempting calendar connection for company:", state);
+		console.log("Attempting calendar connection for user:", state);
 		const calendarManager = new CalendarManager();
 		await calendarManager.handleCallback(code, state);
 
-		console.log("Calendar connection successful for company:", state);
+		console.log("Calendar connection successful for user:", state);
 		throw redirect(302, "/app/calendar?connected=true");
 	} catch (error) {
 		// Only log if it's not a redirect (redirects throw but are successful)
@@ -33,7 +33,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			console.error("Calendar callback error details:", {
 				message: err.message,
 				stack: err.stack,
-				companyId: state,
+				userId: state,
 			});
 
 			// More specific error handling

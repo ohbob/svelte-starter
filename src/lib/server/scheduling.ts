@@ -5,6 +5,8 @@ import { db } from "./db";
 import { notification } from "./notifications";
 import {
 	availability,
+	availabilitySlots,
+	availabilityTemplates,
 	bookingAnswers,
 	bookingQuestions,
 	bookings,
@@ -266,6 +268,7 @@ export class SchedulingManager {
 		// Get available slots from calendar manager (using company owner's calendar)
 		const slots = await this.calendarManager.getAvailableSlots(
 			meetingType.company.userId,
+			companyId,
 			date,
 			meetingType.duration +
 				(meetingType.bufferTimeBefore || 0) +
@@ -333,6 +336,7 @@ export class SchedulingManager {
 		try {
 			const eventId = await this.calendarManager.createEvent({
 				hostUserId: meetingType.company.userId,
+				hostCompanyId: meetingType.companyId,
 				guestName: data.guestName,
 				guestEmail: data.guestEmail,
 				startTime: data.startTime,
@@ -570,6 +574,217 @@ export class SchedulingManager {
 		return await db.query.bookingQuestions.findMany({
 			where: eq(bookingQuestions.meetingTypeId, meetingTypeId),
 			orderBy: [asc(bookingQuestions.order)],
+		});
+	}
+
+	// === AVAILABILITY TEMPLATES ===
+
+	// Create availability template
+	async createAvailabilityTemplate(data: {
+		companyId: string;
+		name: string;
+		description?: string;
+		isDefault?: boolean;
+		slots: {
+			dayOfWeek: number;
+			startTime: string;
+			endTime: string;
+		}[];
+	}) {
+		// If this is set as default, unset other defaults
+		if (data.isDefault) {
+			await db
+				.update(availabilityTemplates)
+				.set({ isDefault: false })
+				.where(
+					and(
+						eq(availabilityTemplates.companyId, data.companyId),
+						eq(availabilityTemplates.isDefault, true)
+					)
+				);
+		}
+
+		const template = await db
+			.insert(availabilityTemplates)
+			.values({
+				companyId: data.companyId,
+				name: data.name,
+				description: data.description,
+				isDefault: data.isDefault || false,
+			})
+			.returning();
+
+		// Add slots
+		if (data.slots.length > 0) {
+			await db.insert(availabilitySlots).values(
+				data.slots.map((slot) => ({
+					templateId: template[0].id,
+					...slot,
+				}))
+			);
+		}
+
+		return template[0];
+	}
+
+	// Update availability template
+	async updateAvailabilityTemplate(
+		templateId: string,
+		companyId: string,
+		data: {
+			name?: string;
+			description?: string;
+			isDefault?: boolean;
+			slots?: {
+				dayOfWeek: number;
+				startTime: string;
+				endTime: string;
+			}[];
+		}
+	) {
+		// Verify company owns the template
+		const template = await db.query.availabilityTemplates.findFirst({
+			where: and(
+				eq(availabilityTemplates.id, templateId),
+				eq(availabilityTemplates.companyId, companyId)
+			),
+		});
+
+		if (!template) {
+			throw new Error("Availability template not found or unauthorized");
+		}
+
+		// If this is set as default, unset other defaults
+		if (data.isDefault) {
+			await db
+				.update(availabilityTemplates)
+				.set({ isDefault: false })
+				.where(
+					and(
+						eq(availabilityTemplates.companyId, companyId),
+						eq(availabilityTemplates.isDefault, true)
+					)
+				);
+		}
+
+		// Update template
+		const updated = await db
+			.update(availabilityTemplates)
+			.set({
+				name: data.name,
+				description: data.description,
+				isDefault: data.isDefault,
+				updatedAt: new Date(),
+			})
+			.where(eq(availabilityTemplates.id, templateId))
+			.returning();
+
+		// Update slots if provided
+		if (data.slots) {
+			// Delete existing slots
+			await db.delete(availabilitySlots).where(eq(availabilitySlots.templateId, templateId));
+
+			// Add new slots
+			if (data.slots.length > 0) {
+				await db.insert(availabilitySlots).values(
+					data.slots.map((slot) => ({
+						templateId,
+						...slot,
+					}))
+				);
+			}
+		}
+
+		return updated[0];
+	}
+
+	// Delete availability template
+	async deleteAvailabilityTemplate(templateId: string, companyId: string) {
+		// Verify company owns the template
+		const template = await db.query.availabilityTemplates.findFirst({
+			where: and(
+				eq(availabilityTemplates.id, templateId),
+				eq(availabilityTemplates.companyId, companyId)
+			),
+		});
+
+		if (!template) {
+			throw new Error("Availability template not found or unauthorized");
+		}
+
+		// Check if any meeting types are using this template
+		const meetingTypesUsingTemplate = await db.query.meetingTypes.findMany({
+			where: and(
+				eq(meetingTypes.availabilityTemplateId, templateId),
+				eq(meetingTypes.isActive, true)
+			),
+		});
+
+		if (meetingTypesUsingTemplate.length > 0) {
+			throw new Error("Cannot delete availability template that is being used by meeting types");
+		}
+
+		// Soft delete the template
+		const deleted = await db
+			.update(availabilityTemplates)
+			.set({ isActive: false, updatedAt: new Date() })
+			.where(eq(availabilityTemplates.id, templateId))
+			.returning();
+
+		return deleted[0];
+	}
+
+	// Get company's availability templates
+	async getAvailabilityTemplates(companyId: string) {
+		return await db.query.availabilityTemplates.findMany({
+			where: and(
+				eq(availabilityTemplates.companyId, companyId),
+				eq(availabilityTemplates.isActive, true)
+			),
+			with: {
+				slots: {
+					orderBy: [asc(availabilitySlots.dayOfWeek), asc(availabilitySlots.startTime)],
+				},
+			},
+			orderBy: [desc(availabilityTemplates.isDefault), asc(availabilityTemplates.name)],
+		});
+	}
+
+	// Get availability template by ID
+	async getAvailabilityTemplate(templateId: string, companyId: string) {
+		const template = await db.query.availabilityTemplates.findFirst({
+			where: and(
+				eq(availabilityTemplates.id, templateId),
+				eq(availabilityTemplates.companyId, companyId),
+				eq(availabilityTemplates.isActive, true)
+			),
+			with: {
+				slots: {
+					orderBy: [asc(availabilitySlots.dayOfWeek), asc(availabilitySlots.startTime)],
+				},
+			},
+		});
+
+		if (!template) {
+			throw new Error("Availability template not found");
+		}
+
+		return template;
+	}
+
+	// Get default availability template for company
+	async getDefaultAvailabilityTemplate(companyId: string) {
+		return await db.query.availabilityTemplates.findFirst({
+			where: and(
+				eq(availabilityTemplates.companyId, companyId),
+				eq(availabilityTemplates.isDefault, true),
+				eq(availabilityTemplates.isActive, true)
+			),
+			with: {
+				slots: {
+					orderBy: [asc(availabilitySlots.dayOfWeek), asc(availabilitySlots.startTime)],
+				},
+			},
 		});
 	}
 }

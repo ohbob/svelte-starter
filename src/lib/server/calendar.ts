@@ -4,7 +4,7 @@ import { addMinutes, endOfDay, startOfDay } from "date-fns";
 import { and, eq, gte, lte } from "drizzle-orm";
 import { google } from "googleapis";
 import { db } from "./db";
-import { availability, bookings, calendarIntegrations, meetingTypes } from "./schema";
+import { availability, bookings, calendarIntegrations, companies, meetingTypes } from "./schema";
 
 export class CalendarManager {
 	private oauth2Client;
@@ -16,28 +16,31 @@ export class CalendarManager {
 			env.GOOGLE_CLIENT_SECRET,
 			`${PUBLIC_BASE_URL}/api/calendar/callback`
 		);
+
 		this.calendar = google.calendar({ version: "v3", auth: this.oauth2Client });
 	}
 
-	// Generate authorization URL for calendar integration
-	generateAuthUrl(companyId: string): string {
+	// Generate auth URL - takes userId for the integration
+	generateAuthUrl(userId: string): string {
+		const scopes = [
+			"https://www.googleapis.com/auth/calendar",
+			"https://www.googleapis.com/auth/calendar.events",
+			"https://www.googleapis.com/auth/calendar.freebusy",
+			"https://www.googleapis.com/auth/calendar.readonly",
+		];
+
 		return this.oauth2Client.generateAuthUrl({
 			access_type: "offline",
-			scope: [
-				"https://www.googleapis.com/auth/calendar",
-				"https://www.googleapis.com/auth/calendar.events",
-				"https://www.googleapis.com/auth/calendar.freebusy",
-				"https://www.googleapis.com/auth/calendar.readonly",
-			],
-			state: companyId,
-			prompt: "consent", // Force consent to get refresh token
+			scope: scopes,
+			prompt: "consent",
+			state: userId, // Pass userId in state for callback
 		});
 	}
 
-	// Handle OAuth callback and store tokens
-	async handleCallback(code: string, companyId: string): Promise<void> {
+	// Handle OAuth callback - uses userId for integration
+	async handleCallback(code: string, userId: string): Promise<void> {
 		try {
-			console.log("Getting tokens for company:", companyId);
+			console.log("Getting tokens for user:", userId);
 			const { tokens } = await this.oauth2Client.getToken(code);
 			console.log("Tokens received:", {
 				hasAccessToken: !!tokens.access_token,
@@ -74,10 +77,22 @@ export class CalendarManager {
 				summary: primaryCalendar.summary,
 			});
 
+			// Deactivate any existing integrations for this user
+			await db
+				.update(calendarIntegrations)
+				.set({
+					isActive: false,
+					updatedAt: new Date(),
+				})
+				.where(
+					and(eq(calendarIntegrations.userId, userId), eq(calendarIntegrations.isActive, true))
+				);
+
 			// Store integration in database
 			console.log("Storing calendar integration in database...");
 			await db.insert(calendarIntegrations).values({
-				companyId,
+				userId,
+				provider: "google",
 				accessToken: tokens.access_token!,
 				refreshToken: tokens.refresh_token,
 				expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
@@ -87,33 +102,27 @@ export class CalendarManager {
 			});
 
 			console.log("Calendar integration stored successfully");
-
-			// Send success notification (we'll need to update this to work with companies)
-			// For now, we'll skip the notification since it's user-based
-			console.log("Calendar integration completed for company:", companyId);
+			console.log("Calendar integration completed for user:", userId);
 		} catch (error) {
 			const err = error as Error;
 			console.error("Calendar callback error details:", {
 				message: err.message,
 				code: (err as any).code,
 				status: (err as any).status,
-				companyId,
+				userId,
 			});
 			throw new Error(`Failed to connect calendar: ${err.message}`);
 		}
 	}
 
-	// Get company's calendar integration
-	private async getCalendarIntegration(companyId: string) {
+	// Get user's calendar integration (private method)
+	private async getCalendarIntegration(userId: string) {
 		const integration = await db.query.calendarIntegrations.findFirst({
-			where: and(
-				eq(calendarIntegrations.companyId, companyId),
-				eq(calendarIntegrations.isActive, true)
-			),
+			where: and(eq(calendarIntegrations.userId, userId), eq(calendarIntegrations.isActive, true)),
 		});
 
 		if (!integration) {
-			throw new Error("No calendar integration found");
+			throw new Error("No calendar integration found for user");
 		}
 
 		// Check if token needs refresh
@@ -146,9 +155,9 @@ export class CalendarManager {
 			.where(eq(calendarIntegrations.id, integration.id));
 	}
 
-	// Set up OAuth client with company's tokens
-	private async setupAuthForCompany(companyId: string) {
-		const integration = await this.getCalendarIntegration(companyId);
+	// Setup auth for user (private method)
+	private async setupAuthForUser(userId: string) {
+		const integration = await this.getCalendarIntegration(userId);
 
 		this.oauth2Client.setCredentials({
 			access_token: integration.accessToken,
@@ -158,8 +167,9 @@ export class CalendarManager {
 		return integration;
 	}
 
-	// Create calendar event for booking
+	// Create calendar event for booking - takes userId for calendar, companyId for booking data
 	async createEvent(bookingData: {
+		hostUserId: string;
 		hostCompanyId: string;
 		guestName: string;
 		guestEmail: string;
@@ -168,7 +178,7 @@ export class CalendarManager {
 		meetingType: typeof meetingTypes.$inferSelect;
 		notes?: string;
 	}): Promise<string> {
-		const integration = await this.setupAuthForCompany(bookingData.hostCompanyId);
+		const integration = await this.setupAuthForUser(bookingData.hostUserId);
 
 		const event = {
 			summary: `${bookingData.meetingType.name} with ${bookingData.guestName}`,
@@ -209,17 +219,18 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 		return response.data.id;
 	}
 
-	// Get available time slots for a date
+	// Get available time slots - takes userId for calendar, companyId for availability
 	async getAvailableSlots(
+		userId: string,
 		companyId: string,
 		date: Date,
 		duration: number
 	): Promise<{ start: Date; end: Date }[]> {
-		const integration = await this.setupAuthForCompany(companyId);
+		const integration = await this.setupAuthForUser(userId);
 
-		// Get user's availability for this day of week
+		// Get company's availability for this day of week
 		const dayOfWeek = date.getDay();
-		const userAvailability = await db.query.availability.findMany({
+		const companyAvailability = await db.query.availability.findMany({
 			where: and(
 				eq(availability.companyId, companyId),
 				eq(availability.dayOfWeek, dayOfWeek),
@@ -227,17 +238,17 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 			),
 		});
 
-		if (userAvailability.length === 0) {
+		if (companyAvailability.length === 0) {
 			return []; // No availability set for this day
 		}
 
-		// Get existing bookings for this date
+		// Get existing bookings for this date and company
 		const dayStart = startOfDay(date);
 		const dayEnd = endOfDay(date);
 
 		const existingBookings = await db.query.bookings.findMany({
 			where: and(
-				eq(bookings.hostUserId, companyId),
+				eq(bookings.hostUserId, userId),
 				gte(bookings.startTime, dayStart),
 				lte(bookings.startTime, dayEnd),
 				eq(bookings.status, "confirmed")
@@ -250,7 +261,7 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 		// Generate available slots
 		const slots: { start: Date; end: Date }[] = [];
 
-		for (const avail of userAvailability) {
+		for (const avail of companyAvailability) {
 			const [startHour, startMinute] = avail.startTime.split(":").map(Number);
 			const [endHour, endMinute] = avail.endTime.split(":").map(Number);
 
@@ -345,9 +356,9 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 	}
 
 	// Cancel calendar event
-	async cancelEvent(companyId: string, eventId: string): Promise<void> {
-		await this.setupAuthForCompany(companyId);
-		const integration = await this.getCalendarIntegration(companyId);
+	async cancelEvent(userId: string, eventId: string): Promise<void> {
+		await this.setupAuthForUser(userId);
+		const integration = await this.getCalendarIntegration(userId);
 
 		await this.calendar.events.delete({
 			calendarId: integration.selectedCalendarId || integration.calendarId!,
@@ -356,12 +367,12 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 		});
 	}
 
-	// Check if company has calendar connected
-	async isCalendarConnected(companyId: string): Promise<boolean> {
+	// Check if user has calendar connected
+	async isCalendarConnected(userId: string): Promise<boolean> {
 		try {
 			const integration = await db.query.calendarIntegrations.findFirst({
 				where: and(
-					eq(calendarIntegrations.companyId, companyId),
+					eq(calendarIntegrations.userId, userId),
 					eq(calendarIntegrations.isActive, true)
 				),
 			});
@@ -373,32 +384,27 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 	}
 
 	// Disconnect calendar
-	async disconnectCalendar(companyId: string): Promise<void> {
+	async disconnectCalendar(userId: string): Promise<void> {
 		await db
 			.update(calendarIntegrations)
 			.set({
 				isActive: false,
 				updatedAt: new Date(),
 			})
-			.where(
-				and(eq(calendarIntegrations.companyId, companyId), eq(calendarIntegrations.isActive, true))
-			);
+			.where(and(eq(calendarIntegrations.userId, userId), eq(calendarIntegrations.isActive, true)));
 	}
 
-	// Get company's calendar integration (public method)
-	async getIntegration(companyId: string) {
+	// Get user's calendar integration (public method)
+	async getIntegration(userId: string) {
 		return await db.query.calendarIntegrations.findFirst({
-			where: and(
-				eq(calendarIntegrations.companyId, companyId),
-				eq(calendarIntegrations.isActive, true)
-			),
+			where: and(eq(calendarIntegrations.userId, userId), eq(calendarIntegrations.isActive, true)),
 		});
 	}
 
-	// Get available calendars for company
-	async getAvailableCalendars(companyId: string): Promise<any[]> {
+	// Get available calendars for user
+	async getAvailableCalendars(userId: string): Promise<any[]> {
 		try {
-			await this.setupAuthForCompany(companyId);
+			await this.setupAuthForUser(userId);
 			const calendarList = await this.calendar.calendarList.list();
 			return calendarList.data.items || [];
 		} catch (error) {
@@ -407,13 +413,13 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 		}
 	}
 
-	// Select a specific calendar for the company
+	// Select a specific calendar for the user
 	async selectCalendar(
-		companyId: string,
+		userId: string,
 		calendarId: string
 	): Promise<typeof calendarIntegrations.$inferSelect> {
 		// First, get the calendar details to store the name
-		await this.setupAuthForCompany(companyId);
+		await this.setupAuthForUser(userId);
 		const calendarList = await this.calendar.calendarList.list();
 		const selectedCalendar = calendarList.data.items?.find((cal: any) => cal.id === calendarId);
 
@@ -428,16 +434,11 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 				selectedCalendarName: selectedCalendar.summary,
 				updatedAt: new Date(),
 			})
-			.where(
-				and(eq(calendarIntegrations.companyId, companyId), eq(calendarIntegrations.isActive, true))
-			);
+			.where(and(eq(calendarIntegrations.userId, userId), eq(calendarIntegrations.isActive, true)));
 
 		// Return the updated integration
 		const updatedIntegration = await db.query.calendarIntegrations.findFirst({
-			where: and(
-				eq(calendarIntegrations.companyId, companyId),
-				eq(calendarIntegrations.isActive, true)
-			),
+			where: and(eq(calendarIntegrations.userId, userId), eq(calendarIntegrations.isActive, true)),
 		});
 
 		if (!updatedIntegration) {
@@ -447,14 +448,15 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 		return updatedIntegration;
 	}
 
-	async getCalendarStatus(companyId: string): Promise<{
+	// Get calendar status for user
+	async getCalendarStatus(userId: string): Promise<{
 		isConnected: boolean;
 		integration: typeof calendarIntegrations.$inferSelect | null;
 	}> {
 		try {
 			const integration = await db.query.calendarIntegrations.findFirst({
 				where: and(
-					eq(calendarIntegrations.companyId, companyId),
+					eq(calendarIntegrations.userId, userId),
 					eq(calendarIntegrations.isActive, true)
 				),
 			});
@@ -470,5 +472,62 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 				integration: null,
 			};
 		}
+	}
+
+	// Helper method to get userId from companyId (for backward compatibility)
+	private async getUserIdFromCompanyId(companyId: string): Promise<string> {
+		const company = await db.query.companies.findFirst({
+			where: eq(companies.id, companyId),
+		});
+
+		if (!company) {
+			throw new Error("Company not found");
+		}
+
+		return company.userId;
+	}
+
+	// Backward compatibility wrapper methods that accept companyId and resolve to userId
+
+	// Get calendar status by company (resolves to user)
+	async getCalendarStatusByCompany(companyId: string): Promise<{
+		isConnected: boolean;
+		integration: typeof calendarIntegrations.$inferSelect | null;
+	}> {
+		const userId = await this.getUserIdFromCompanyId(companyId);
+		return this.getCalendarStatus(userId);
+	}
+
+	// Check if calendar is connected by company (resolves to user)
+	async isCalendarConnectedByCompany(companyId: string): Promise<boolean> {
+		const userId = await this.getUserIdFromCompanyId(companyId);
+		return this.isCalendarConnected(userId);
+	}
+
+	// Get integration by company (resolves to user)
+	async getIntegrationByCompany(companyId: string) {
+		const userId = await this.getUserIdFromCompanyId(companyId);
+		return this.getIntegration(userId);
+	}
+
+	// Get available calendars by company (resolves to user)
+	async getAvailableCalendarsByCompany(companyId: string): Promise<any[]> {
+		const userId = await this.getUserIdFromCompanyId(companyId);
+		return this.getAvailableCalendars(userId);
+	}
+
+	// Select calendar by company (resolves to user)
+	async selectCalendarByCompany(
+		companyId: string,
+		calendarId: string
+	): Promise<typeof calendarIntegrations.$inferSelect> {
+		const userId = await this.getUserIdFromCompanyId(companyId);
+		return this.selectCalendar(userId, calendarId);
+	}
+
+	// Disconnect calendar by company (resolves to user)
+	async disconnectCalendarByCompany(companyId: string): Promise<void> {
+		const userId = await this.getUserIdFromCompanyId(companyId);
+		return this.disconnectCalendar(userId);
 	}
 }

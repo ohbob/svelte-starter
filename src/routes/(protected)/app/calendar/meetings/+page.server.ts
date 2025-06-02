@@ -13,7 +13,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 			isCalendarConnected: false,
 			calendarIntegration: null,
 			meetingTypes: [],
-			availabilityTemplates: [],
+			availability: [],
 		};
 	}
 
@@ -21,86 +21,31 @@ export const load: PageServerLoad = async ({ parent }) => {
 		const calendarManager = new CalendarManager();
 		const schedulingManager = new SchedulingManager();
 
-		// Load calendar status (user-based) and company data
-		const [calendarStatus, companyMeetingTypes, companyAvailabilityTemplates] = await Promise.all([
+		// Load calendar status and meeting types
+		const [calendarStatus, companyMeetingTypes, companyAvailability] = await Promise.all([
 			calendarManager.getCalendarStatusByCompany(currentCompany.id),
 			schedulingManager.getCompanyMeetingTypes(currentCompany.id),
-			schedulingManager.getAvailabilityTemplates(currentCompany.id),
+			schedulingManager.getAvailability(currentCompany.id),
 		]);
 
 		return {
 			isCalendarConnected: calendarStatus.isConnected,
 			calendarIntegration: calendarStatus.integration,
 			meetingTypes: companyMeetingTypes,
-			availabilityTemplates: companyAvailabilityTemplates,
+			availability: companyAvailability,
 		};
 	} catch (error) {
-		console.error("Error loading calendar data:", error);
+		console.error("Error loading meeting types:", error);
 		return {
 			isCalendarConnected: false,
 			calendarIntegration: null,
 			meetingTypes: [],
-			availabilityTemplates: [],
+			availability: [],
 		};
 	}
 };
 
 export const actions: Actions = {
-	disconnect: async ({ request, cookies }) => {
-		const session = await auth.api.getSession({ headers: request.headers });
-
-		if (!session) {
-			return fail(401, { error: "Unauthorized" });
-		}
-
-		const selectedCompanyId = cookies.get("selectedCompanyId");
-
-		if (!selectedCompanyId) {
-			return fail(400, { error: "No company selected" });
-		}
-
-		try {
-			const calendarManager = new CalendarManager();
-			await calendarManager.disconnectCalendarByCompany(selectedCompanyId);
-
-			return { success: true, message: "Calendar disconnected successfully!" };
-		} catch (error) {
-			console.error("Error disconnecting calendar:", error);
-			return fail(500, { error: "Failed to disconnect calendar" });
-		}
-	},
-
-	selectCalendar: async ({ request, cookies }) => {
-		const session = await auth.api.getSession({ headers: request.headers });
-
-		if (!session) {
-			return fail(401, { error: "Unauthorized" });
-		}
-
-		const selectedCompanyId = cookies.get("selectedCompanyId");
-
-		if (!selectedCompanyId) {
-			return fail(400, { error: "No company selected" });
-		}
-
-		const formData = await request.formData();
-		const calendarId = formData.get("calendarId") as string;
-
-		if (!calendarId) {
-			return fail(400, { error: "Calendar ID is required" });
-		}
-
-		try {
-			const calendarManager = new CalendarManager();
-			await calendarManager.selectCalendarByCompany(selectedCompanyId, calendarId);
-
-			return { success: true, message: "Calendar selected successfully!" };
-		} catch (error) {
-			console.error("Error selecting calendar:", error);
-			return fail(500, { error: "Failed to select calendar" });
-		}
-	},
-
 	createMeetingType: async ({ request, cookies }) => {
 		const session = await auth.api.getSession({ headers: request.headers });
 
@@ -226,37 +171,6 @@ export const actions: Actions = {
 		} catch (error) {
 			console.error("Error deleting meeting type:", error);
 			return fail(500, { error: "Failed to delete meeting type" });
-		}
-	},
-
-	saveAvailability: async ({ request, cookies }) => {
-		const session = await auth.api.getSession({ headers: request.headers });
-
-		if (!session) {
-			return fail(401, { error: "Unauthorized" });
-		}
-
-		const selectedCompanyId = cookies.get("selectedCompanyId");
-
-		if (!selectedCompanyId) {
-			return fail(400, { error: "No company selected" });
-		}
-
-		const formData = await request.formData();
-		const availabilityData = JSON.parse(formData.get("availability") as string);
-
-		if (!Array.isArray(availabilityData)) {
-			return fail(400, { error: "Invalid availability data" });
-		}
-
-		try {
-			const schedulingManager = new SchedulingManager();
-			await schedulingManager.setAvailability(selectedCompanyId, session.user.id, availabilityData);
-
-			return { success: true, message: "Availability updated successfully!" };
-		} catch (error) {
-			console.error("Error saving availability:", error);
-			return fail(500, { error: "Failed to save availability" });
 		}
 	},
 };

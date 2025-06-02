@@ -2,109 +2,26 @@
 	import { onMount } from "svelte";
 	import { page } from "$app/stores";
 	import { toast } from "$lib/utils/toast";
-	import { enhance } from "$app/forms";
 	import { invalidateAll } from "$app/navigation";
+	import { enhance } from "$app/forms";
 	import Button from "$lib/components/ui/button/button.svelte";
 
-	let { data, form } = $props();
+	let { data } = $props();
 
-	// Simple reactive state - no complex effects
+	// State
+	let loading = $state(true);
 	let isCalendarConnected = $state(false);
 	let calendarIntegration = $state(null);
-	let availableCalendars = $state([]);
 	let meetingTypes = $state([]);
-	let availability = $state([]);
+	let availabilityTemplates = $state([]);
 
-	let upcomingBookings = $state([]);
-	let loading = $state(false);
-	let showCalendarSelector = $state(false);
-	let loadingCalendars = $state(false);
-	let selectingCalendar = $state(false);
-	let selectedCalendarId = $state(null);
-
-	// Meeting type form
-	let showMeetingTypeForm = $state(false);
-	let editingMeetingType = $state(null);
-	let meetingTypeForm = $state({
-		name: "",
-		description: "",
-		duration: 30,
-		price: 0,
-		color: "#3b82f6",
-		requiresConfirmation: false,
-		bufferTimeBefore: 0,
-		bufferTimeAfter: 0,
-	});
-
-	// Availability form
-	let showAvailabilityForm = $state(false);
-	let availabilityForm = $state([
-		{ dayOfWeek: 1, startTime: "09:00", endTime: "17:00", enabled: true },
-		{ dayOfWeek: 2, startTime: "09:00", endTime: "17:00", enabled: true },
-		{ dayOfWeek: 3, startTime: "09:00", endTime: "17:00", enabled: true },
-		{ dayOfWeek: 4, startTime: "09:00", endTime: "17:00", enabled: true },
-		{ dayOfWeek: 5, startTime: "09:00", endTime: "17:00", enabled: true },
-		{ dayOfWeek: 6, startTime: "09:00", endTime: "17:00", enabled: false },
-		{ dayOfWeek: 0, startTime: "09:00", endTime: "17:00", enabled: false },
-	]);
-
-	const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-	// Simple data sync - only when data prop changes
+	// Simple data sync
 	$effect(() => {
-		// Update local state from server data
 		isCalendarConnected = data.isCalendarConnected || false;
 		calendarIntegration = data.calendarIntegration || null;
-		availableCalendars = data.availableCalendars || [];
 		meetingTypes = data.meetingTypes || [];
-		availability = data.availability || [];
-
-		// Update availability form if we have server data
-		if (data.availability && data.availability.length > 0) {
-			// Reset form first
-			availabilityForm.forEach((day) => {
-				day.enabled = false;
-				day.startTime = "09:00";
-				day.endTime = "17:00";
-			});
-
-			// Apply server data
-			data.availability.forEach((avail) => {
-				const formDay = availabilityForm.find((f) => f.dayOfWeek === avail.dayOfWeek);
-				if (formDay) {
-					formDay.startTime = avail.startTime;
-					formDay.endTime = avail.endTime;
-					formDay.enabled = true;
-				}
-			});
-		}
-	});
-
-	// Handle form results
-	$effect(() => {
-		if (form?.success) {
-			toast.success(form.message || "Operation completed successfully");
-
-			// Handle specific form results
-			if (form.integration) {
-				calendarIntegration = form.integration;
-			}
-
-			// Close modals
-			if (form.message?.includes("Calendar")) {
-				showCalendarSelector = false;
-				selectingCalendar = false;
-				selectedCalendarId = null;
-			} else if (form.message?.includes("Meeting")) {
-				showMeetingTypeForm = false;
-				resetMeetingTypeForm();
-			} else if (form.message?.includes("Availability")) {
-				showAvailabilityForm = false;
-			}
-		} else if (form?.error) {
-			toast.error(form.error || "An error occurred");
-			selectingCalendar = false;
-		}
+		availabilityTemplates = data.availabilityTemplates || [];
+		loading = false;
 	});
 
 	onMount(async () => {
@@ -129,247 +46,64 @@
 			toast.error(errorMessages[error] || "Calendar connection failed");
 		}
 	});
-
-	function resetMeetingTypeForm() {
-		editingMeetingType = null;
-		meetingTypeForm = {
-			name: "",
-			description: "",
-			duration: 30,
-			price: 0,
-			color: "#3b82f6",
-			requiresConfirmation: false,
-			bufferTimeBefore: 0,
-			bufferTimeAfter: 0,
-		};
-	}
-
-	function editMeetingType(meetingType) {
-		editingMeetingType = meetingType;
-		meetingTypeForm = {
-			name: meetingType.name,
-			description: meetingType.description || "",
-			duration: meetingType.duration,
-			price: meetingType.price,
-			color: meetingType.color,
-			requiresConfirmation: meetingType.requiresConfirmation,
-			bufferTimeBefore: meetingType.bufferTimeBefore || 0,
-			bufferTimeAfter: meetingType.bufferTimeAfter || 0,
-		};
-		showMeetingTypeForm = true;
-	}
-
-	function deleteMeetingType(meetingType) {
-		if (confirm(`Are you sure you want to delete "${meetingType.name}"?`)) {
-			// Create a temporary form for deletion
-			const form = document.createElement("form");
-			form.method = "POST";
-			form.action = "?/deleteMeetingType";
-			form.style.display = "none";
-
-			const input = document.createElement("input");
-			input.type = "hidden";
-			input.name = "id";
-			input.value = meetingType.id;
-			form.appendChild(input);
-
-			document.body.appendChild(form);
-			form.submit();
-			document.body.removeChild(form);
-		}
-	}
-
-	function saveAvailability() {
-		const availabilityData = availabilityForm
-			.filter((day) => day.enabled)
-			.map((day) => ({
-				dayOfWeek: day.dayOfWeek,
-				startTime: day.startTime,
-				endTime: day.endTime,
-			}));
-
-		const form = document.createElement("form");
-		form.method = "POST";
-		form.action = "?/saveAvailability";
-
-		const input = document.createElement("input");
-		input.type = "hidden";
-		input.name = "availability";
-		input.value = JSON.stringify(availabilityData);
-		form.appendChild(input);
-
-		document.body.appendChild(form);
-		form.submit();
-		document.body.removeChild(form);
-	}
-
-	function connectCalendar() {
-		window.location.href = "/api/calendar/connect";
-	}
-
-	function handleShowCalendarSelector() {
-		selectedCalendarId = calendarIntegration?.selectedCalendarId || null;
-		showCalendarSelector = true;
-
-		// Lazy load calendars when modal opens if we don't have any
-		if (availableCalendars.length === 0 && isCalendarConnected) {
-			loadAvailableCalendars();
-		}
-	}
-
-	async function loadAvailableCalendars() {
-		if (loadingCalendars) return; // Prevent multiple requests
-
-		loadingCalendars = true;
-		try {
-			const response = await fetch("/api/calendar/calendars");
-			const result = await response.json();
-
-			if (response.ok) {
-				availableCalendars = result.calendars || [];
-			} else {
-				toast.error(result.error || "Failed to load calendars");
-			}
-		} catch (error) {
-			console.error("Error loading calendars:", error);
-			toast.error("Failed to load calendars");
-		} finally {
-			loadingCalendars = false;
-		}
-	}
-
-	function handleCalendarSelectorCancel() {
-		selectedCalendarId = null;
-		showCalendarSelector = false;
-	}
-
-	function handleCalendarSelect(event) {
-		const calendarId = event.currentTarget.dataset.calendarId;
-		selectedCalendarId = calendarId;
-	}
-
-	function handleMeetingTypeFormCancel() {
-		showMeetingTypeForm = false;
-		resetMeetingTypeForm();
-	}
-
-	function handleAvailabilityFormCancel() {
-		showAvailabilityForm = false;
-	}
-
-	function handleShowMeetingTypeForm() {
-		showMeetingTypeForm = true;
-	}
-
-	function handleShowAvailabilityForm() {
-		showAvailabilityForm = true;
-	}
-
-	function formatDuration(minutes) {
-		if (minutes < 60) return `${minutes}m`;
-		const hours = Math.floor(minutes / 60);
-		const mins = minutes % 60;
-		return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-	}
-
-	function formatPrice(cents) {
-		if (cents === 0) return "Free";
-		return `$${(cents / 100).toFixed(2)}`;
-	}
 </script>
 
-<div class="p-6">
-	<div class="mb-8">
-		<h1 class="text-3xl font-bold text-gray-900">Calendar & Scheduling</h1>
-		<p class="mt-2 text-gray-600">
-			Manage your calendar integration, meeting types, and availability
-		</p>
+{#if loading}
+	<div class="flex h-64 items-center justify-center">
+		<div class="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
+	</div>
+{:else}
+	<!-- Calendar Connection Status -->
+	<div class="mb-6 rounded-lg border bg-white p-6 shadow-sm">
+		<div class="flex items-center justify-between">
+			<div>
+				<h2 class="text-xl font-semibold text-gray-900">Google Calendar Integration</h2>
+				<p class="mt-1 text-gray-600">
+					{#if isCalendarConnected}
+						✅ Connected and ready for scheduling across all companies
+					{:else}
+						Connect your Google Calendar to enable scheduling
+					{/if}
+				</p>
+			</div>
+			<div class="flex items-center gap-3">
+				{#if isCalendarConnected}
+					<div class="flex items-center text-green-600">
+						<svg class="mr-2 h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+							<path
+								fill-rule="evenodd"
+								d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+								clip-rule="evenodd"
+							></path>
+						</svg>
+						Connected
+					</div>
+					<form method="POST" action="?/disconnect" use:enhance>
+						<Button type="submit" variant="outline" class="text-red-600 hover:text-red-700">
+							Disconnect
+						</Button>
+					</form>
+				{:else}
+					<a href="/api/calendar/connect">
+						<Button class="bg-blue-600 hover:bg-blue-700">Connect Google Calendar</Button>
+					</a>
+				{/if}
+			</div>
+		</div>
 	</div>
 
-	{#if loading}
-		<div class="flex items-center justify-center py-12">
-			<div class="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
-		</div>
-	{:else}
-		<!-- Calendar Connection Status -->
-		<div class="mb-6 rounded-lg border bg-white p-6 shadow-sm">
-			<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-				<div class="min-w-0 flex-1">
-					<h2 class="text-xl font-semibold text-gray-900">Google Calendar</h2>
-					<p class="mt-1 break-words text-gray-600">
-						{#if isCalendarConnected && calendarIntegration}
-							Connected to: <span class="font-medium"
-								>{calendarIntegration.selectedCalendarName ||
-									calendarIntegration.selectedCalendarId}</span
-							>
-						{:else if isCalendarConnected}
-							Your Google Calendar is connected and ready for scheduling
-						{:else}
-							Connect your Google Calendar to enable scheduling
-						{/if}
-					</p>
+	<!-- Quick Stats -->
+	<div class="grid gap-6 md:grid-cols-3">
+		<!-- Meeting Types -->
+		<div class="rounded-lg border bg-white p-6 shadow-sm">
+			<div class="flex items-center justify-between">
+				<div>
+					<h3 class="text-lg font-medium text-gray-900">Meeting Types</h3>
+					<p class="text-3xl font-bold text-blue-600">{meetingTypes.length}</p>
+					<p class="text-sm text-gray-500">Active meeting types</p>
 				</div>
-				<div class="flex flex-col gap-3 sm:flex-row">
-					{#if isCalendarConnected}
-						<div class="flex items-center text-green-600">
-							<svg class="mr-2 h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-								<path
-									fill-rule="evenodd"
-									d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-									clip-rule="evenodd"
-								></path>
-							</svg>
-							Connected
-						</div>
-						<div class="flex flex-col gap-2 sm:flex-row">
-							<Button
-								onclick={handleShowCalendarSelector}
-								variant="outline"
-								class="w-full sm:w-auto">Change Calendar</Button
-							>
-							<form method="POST" action="?/disconnect" use:enhance>
-								<Button
-									type="submit"
-									variant="outline"
-									class="w-full text-red-600 hover:text-red-700 sm:w-auto"
-								>
-									Disconnect
-								</Button>
-							</form>
-						</div>
-					{:else}
-						<Button
-							onclick={connectCalendar}
-							class="w-full bg-blue-600 hover:bg-blue-700 sm:w-auto"
-						>
-							Connect Google Calendar
-						</Button>
-					{/if}
-				</div>
-			</div>
-		</div>
-
-		<!-- Meetings -->
-		<div class="mb-6 rounded-lg border bg-white p-6 shadow-sm">
-			<div class="mb-4 flex items-center justify-between">
-				<h2 class="text-xl font-semibold text-gray-900">Meetings</h2>
-				<Button
-					onclick={handleShowMeetingTypeForm}
-					disabled={!isCalendarConnected}
-					class="bg-blue-600 hover:bg-blue-700"
-				>
-					Add Meeting
-				</Button>
-			</div>
-
-			{#if meetingTypes.length === 0}
-				<div class="py-8 text-center text-gray-500">
-					<svg
-						class="mx-auto mb-4 h-12 w-12 text-gray-300"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-					>
+				<div class="rounded-full bg-blue-100 p-3">
+					<svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
@@ -377,87 +111,52 @@
 							d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
 						></path>
 					</svg>
-					<p>No meetings created yet</p>
-					<p class="text-sm">Create your first meeting to start accepting bookings</p>
 				</div>
-			{:else}
-				<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-					{#each meetingTypes as meetingType}
-						<div class="rounded-lg border p-4 transition-shadow hover:shadow-md">
-							<div class="mb-2 flex items-start justify-between">
-								<div class="flex items-center">
-									<div
-										class="mr-3 h-3 w-3 rounded-full"
-										style:background-color={meetingType.color}
-									></div>
-									<h3 class="font-medium text-gray-900">{meetingType.name}</h3>
-								</div>
-								<div class="flex items-center gap-2">
-									<span class="text-sm text-gray-500">{formatPrice(meetingType.price)}</span>
-									<button
-										onclick={(e) => editMeetingType(meetingType)}
-										class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-										title="Edit meeting"
-									>
-										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-											></path>
-										</svg>
-									</button>
-									<button
-										onclick={(e) => deleteMeetingType(meetingType)}
-										class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600"
-										title="Delete meeting"
-									>
-										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-											></path>
-										</svg>
-									</button>
-								</div>
-							</div>
-							{#if meetingType.description}
-								<p class="mb-3 text-sm text-gray-600">{meetingType.description}</p>
-							{/if}
-							<div class="flex items-center justify-between text-sm text-gray-500">
-								<span>{formatDuration(meetingType.duration)}</span>
-								{#if meetingType.requiresConfirmation}
-									<span class="rounded-full bg-yellow-100 px-2 py-1 text-xs text-yellow-800">
-										Requires confirmation
-									</span>
-								{/if}
-							</div>
-						</div>
-					{/each}
-				</div>
-			{/if}
+			</div>
+			<div class="mt-4">
+				<a href="/app/calendar/meetings" class="text-sm text-blue-600 hover:text-blue-700">
+					Manage meeting types →
+				</a>
+			</div>
 		</div>
 
 		<!-- Availability -->
 		<div class="rounded-lg border bg-white p-6 shadow-sm">
-			<div class="mb-4 flex items-center justify-between">
-				<h2 class="text-xl font-semibold text-gray-900">Availability</h2>
-				<Button
-					onclick={handleShowAvailabilityForm}
-					disabled={!isCalendarConnected}
-					variant="outline"
-				>
-					Edit Availability
-				</Button>
+			<div class="flex items-center justify-between">
+				<div>
+					<h3 class="text-lg font-medium text-gray-900">Availability Templates</h3>
+					<p class="text-3xl font-bold text-green-600">{availabilityTemplates.length}</p>
+					<p class="text-sm text-gray-500">Availability templates</p>
+				</div>
+				<div class="rounded-full bg-green-100 p-3">
+					<svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+						></path>
+					</svg>
+				</div>
 			</div>
+			<div class="mt-4">
+				<a href="/app/calendar/availability" class="text-sm text-green-600 hover:text-green-700">
+					Manage templates →
+				</a>
+			</div>
+		</div>
 
-			{#if availability.length === 0}
-				<div class="py-8 text-center text-gray-500">
+		<!-- Bookings -->
+		<div class="rounded-lg border bg-white p-6 shadow-sm">
+			<div class="flex items-center justify-between">
+				<div>
+					<h3 class="text-lg font-medium text-gray-900">Bookings</h3>
+					<p class="text-3xl font-bold text-purple-600">0</p>
+					<p class="text-sm text-gray-500">Upcoming bookings</p>
+				</div>
+				<div class="rounded-full bg-purple-100 p-3">
 					<svg
-						class="mx-auto mb-4 h-12 w-12 text-gray-300"
+						class="h-6 w-6 text-purple-600"
 						fill="none"
 						stroke="currentColor"
 						viewBox="0 0 24 24"
@@ -466,294 +165,34 @@
 							stroke-linecap="round"
 							stroke-linejoin="round"
 							stroke-width="2"
-							d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+							d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
 						></path>
 					</svg>
-					<p>No availability set</p>
-					<p class="text-sm">Set your availability to allow bookings</p>
 				</div>
-			{:else}
-				<div class="space-y-2">
-					{#each availability as avail}
-						<div
-							class="flex items-center justify-between border-b border-gray-100 py-2 last:border-b-0"
-						>
-							<span class="font-medium text-gray-900">{dayNames[avail.dayOfWeek]}</span>
-							<span class="text-gray-600">{avail.startTime} - {avail.endTime}</span>
-						</div>
-					{/each}
-				</div>
-			{/if}
+			</div>
+			<div class="mt-4">
+				<a href="/app/calendar/bookings" class="text-sm text-purple-600 hover:text-purple-700">
+					View bookings →
+				</a>
+			</div>
+		</div>
+	</div>
+
+	<!-- Quick Actions -->
+	{#if isCalendarConnected}
+		<div class="mt-6 rounded-lg border bg-white p-6 shadow-sm">
+			<h3 class="mb-4 text-lg font-medium text-gray-900">Quick Actions</h3>
+			<div class="flex flex-wrap gap-3">
+				<a href="/app/calendar/meetings">
+					<Button class="bg-blue-600 hover:bg-blue-700">Create Meeting Type</Button>
+				</a>
+				<a href="/app/calendar/availability">
+					<Button variant="outline">Manage Templates</Button>
+				</a>
+				<a href="/app/calendar/bookings">
+					<Button variant="outline">View Bookings</Button>
+				</a>
+			</div>
 		</div>
 	{/if}
-</div>
-
-<!-- Meeting Type Form Modal -->
-{#if showMeetingTypeForm}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-		<div class="w-full max-w-md rounded-lg bg-white p-6">
-			<h3 class="mb-4 text-lg font-semibold text-gray-900">
-				{editingMeetingType ? "Edit Meeting" : "Create Meeting"}
-			</h3>
-
-			<form
-				method="POST"
-				action={editingMeetingType ? "?/updateMeetingType" : "?/createMeetingType"}
-				use:enhance
-				class="space-y-4"
-			>
-				{#if editingMeetingType}
-					<input type="hidden" name="id" value={editingMeetingType.id} />
-				{/if}
-
-				<div>
-					<label for="meetingName" class="mb-1 block text-sm font-medium text-gray-700">Name</label>
-					<input
-						type="text"
-						id="meetingName"
-						name="name"
-						bind:value={meetingTypeForm.name}
-						required
-						class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-						placeholder="30 Minute Meeting"
-					/>
-				</div>
-
-				<div>
-					<label for="meetingDescription" class="mb-1 block text-sm font-medium text-gray-700"
-						>Description</label
-					>
-					<textarea
-						id="meetingDescription"
-						name="description"
-						bind:value={meetingTypeForm.description}
-						rows="3"
-						class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-						placeholder="Brief description of the meeting"
-					></textarea>
-				</div>
-
-				<div class="grid grid-cols-2 gap-4">
-					<div>
-						<label for="meetingDuration" class="mb-1 block text-sm font-medium text-gray-700"
-							>Duration (minutes)</label
-						>
-						<input
-							type="number"
-							id="meetingDuration"
-							name="duration"
-							bind:value={meetingTypeForm.duration}
-							min="15"
-							max="480"
-							step="15"
-							required
-							class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-						/>
-					</div>
-
-					<div>
-						<label for="meetingPrice" class="mb-1 block text-sm font-medium text-gray-700"
-							>Price (cents)</label
-						>
-						<input
-							type="number"
-							id="meetingPrice"
-							name="price"
-							bind:value={meetingTypeForm.price}
-							min="0"
-							class="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-							placeholder="0 for free"
-						/>
-					</div>
-				</div>
-
-				<div>
-					<label for="meetingColor" class="mb-1 block text-sm font-medium text-gray-700"
-						>Color</label
-					>
-					<input
-						type="color"
-						id="meetingColor"
-						name="color"
-						bind:value={meetingTypeForm.color}
-						class="h-10 w-full rounded-md border border-gray-300"
-					/>
-				</div>
-
-				<div class="flex items-center">
-					<input
-						type="checkbox"
-						name="requiresConfirmation"
-						bind:checked={meetingTypeForm.requiresConfirmation}
-						id="requiresConfirmation"
-						class="mr-2"
-					/>
-					<label for="requiresConfirmation" class="text-sm text-gray-700">
-						Requires confirmation before booking
-					</label>
-				</div>
-
-				<div class="flex justify-end gap-3 pt-4">
-					<Button type="button" variant="outline" onclick={handleMeetingTypeFormCancel}>
-						Cancel
-					</Button>
-					<Button type="submit" class="bg-blue-600 hover:bg-blue-700">
-						{editingMeetingType ? "Update Meeting" : "Create Meeting"}
-					</Button>
-				</div>
-			</form>
-		</div>
-	</div>
-{/if}
-
-<!-- Availability Form Modal -->
-{#if showAvailabilityForm}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-		<div class="w-full max-w-lg rounded-lg bg-white p-6">
-			<h3 class="mb-4 text-lg font-semibold text-gray-900">Set Availability</h3>
-
-			<form method="POST" action="?/saveAvailability" use:enhance class="space-y-4">
-				<input
-					type="hidden"
-					name="availability"
-					value={JSON.stringify(
-						availabilityForm
-							.filter((day) => day.enabled)
-							.map((day) => ({
-								dayOfWeek: day.dayOfWeek,
-								startTime: day.startTime,
-								endTime: day.endTime,
-							}))
-					)}
-				/>
-
-				{#each availabilityForm as day}
-					<div class="flex items-center gap-4">
-						<div class="w-20">
-							<input
-								type="checkbox"
-								bind:checked={day.enabled}
-								id="day-{day.dayOfWeek}"
-								class="mr-2"
-							/>
-							<label for="day-{day.dayOfWeek}" class="text-sm font-medium text-gray-700">
-								{dayNames[day.dayOfWeek].slice(0, 3)}
-							</label>
-						</div>
-
-						{#if day.enabled}
-							<div class="flex flex-1 items-center gap-2">
-								<input
-									type="time"
-									bind:value={day.startTime}
-									class="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-								/>
-								<span class="text-gray-500">to</span>
-								<input
-									type="time"
-									bind:value={day.endTime}
-									class="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-								/>
-							</div>
-						{:else}
-							<div class="flex-1 text-sm text-gray-400">Unavailable</div>
-						{/if}
-					</div>
-				{/each}
-
-				<div class="flex justify-end gap-3 pt-4">
-					<Button type="button" variant="outline" onclick={handleAvailabilityFormCancel}>
-						Cancel
-					</Button>
-					<Button type="submit" class="bg-blue-600 hover:bg-blue-700">Save Availability</Button>
-				</div>
-			</form>
-		</div>
-	</div>
-{/if}
-
-<!-- Calendar Selector Modal -->
-{#if showCalendarSelector}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-		<div class="w-full max-w-md rounded-lg bg-white p-6">
-			<h3 class="mb-4 text-lg font-semibold text-gray-900">Select Calendar</h3>
-			<p class="mb-4 text-gray-600">Choose which calendar to use for your bookings:</p>
-
-			<form method="POST" action="?/selectCalendar" use:enhance class="calendar-selector-form">
-				<input type="hidden" name="calendarId" value={selectedCalendarId || ""} />
-
-				{#if loadingCalendars}
-					<div class="py-8 text-center text-gray-500">
-						<div
-							class="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"
-						></div>
-						<p>Loading calendars...</p>
-					</div>
-				{:else if availableCalendars.length === 0}
-					<div class="py-8 text-center text-gray-500">
-						<p>No calendars found</p>
-						<p class="text-sm">Make sure you have calendars in your Google account</p>
-						<button
-							type="button"
-							onclick={loadAvailableCalendars}
-							class="mt-2 text-sm text-blue-600 underline hover:text-blue-700"
-						>
-							Try again
-						</button>
-					</div>
-				{:else}
-					<div class="max-h-60 space-y-2 overflow-y-auto">
-						{#each availableCalendars as calendar}
-							<button
-								type="button"
-								onclick={handleCalendarSelect}
-								data-calendar-id={calendar.id}
-								class="w-full rounded-lg border p-3 text-left transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-								class:bg-blue-50={selectedCalendarId === calendar.id}
-								class:border-blue-500={selectedCalendarId === calendar.id}
-								class:border-gray-200={selectedCalendarId !== calendar.id}
-								class:shadow-sm={selectedCalendarId === calendar.id}
-							>
-								<div class="font-medium text-gray-900">{calendar.summary}</div>
-								{#if calendar.description}
-									<div class="text-sm text-gray-600">{calendar.description}</div>
-								{/if}
-								<div class="mt-1 text-xs text-gray-500">
-									{calendar.id}
-									{#if calendar.primary}
-										<span class="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-blue-800"
-											>Primary</span
-										>
-									{/if}
-									{#if calendarIntegration?.selectedCalendarId === calendar.id}
-										<span class="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-green-800"
-											>Currently Selected</span
-										>
-									{/if}
-								</div>
-							</button>
-						{/each}
-					</div>
-				{/if}
-
-				<div class="mt-4 flex justify-end gap-3 border-t pt-4">
-					<Button type="button" variant="outline" onclick={handleCalendarSelectorCancel}>
-						Cancel
-					</Button>
-					{#if selectedCalendarId}
-						<Button
-							type="submit"
-							class="bg-blue-600 hover:bg-blue-700"
-							disabled={selectingCalendar}
-						>
-							{#if selectingCalendar}
-								<div class="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
-							{/if}
-							Save Selection
-						</Button>
-					{/if}
-				</div>
-			</form>
-		</div>
-	</div>
 {/if}

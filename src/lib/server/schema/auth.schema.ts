@@ -9,6 +9,8 @@ export const user = pgTable("user", {
 	image: text("image"),
 	customUrl: text("custom_url").unique(),
 	contactEmail: text("contact_email"),
+	role: text("role"),
+	companyId: text("company_id"),
 	createdAt: timestamp("created_at").notNull(),
 	updatedAt: timestamp("updated_at").notNull(),
 });

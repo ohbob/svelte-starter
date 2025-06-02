@@ -17,26 +17,75 @@ const toastConfig = {
 	},
 };
 
-// Toast API with method-based approach
+// Deduplication mechanism
+interface ToastMessage {
+	message: string;
+	type: string;
+	timestamp: number;
+}
+
+const recentToasts: ToastMessage[] = [];
+const DEDUP_WINDOW = 3000; // 3 seconds window for deduplication
+
+function isDuplicateToast(message: string, type: string): boolean {
+	const now = Date.now();
+
+	// Clean up old messages outside the deduplication window
+	const cutoff = now - DEDUP_WINDOW;
+	for (let i = recentToasts.length - 1; i >= 0; i--) {
+		if (recentToasts[i].timestamp < cutoff) {
+			recentToasts.splice(i, 1);
+		}
+	}
+
+	// Check if this message already exists in recent toasts
+	const isDuplicate = recentToasts.some(
+		(toast) => toast.message === message && toast.type === type
+	);
+
+	if (!isDuplicate) {
+		// Add this message to recent toasts
+		recentToasts.push({ message, type, timestamp: now });
+	}
+
+	return isDuplicate;
+}
+
+// Toast API with method-based approach and deduplication
 export const toast = {
 	success: (message: string, options?: any) => {
+		if (typeof message !== "string" || !message.trim()) return;
+		if (isDuplicateToast(message, "success")) return;
+
 		const config = { ...toastConfig, ...options };
 		return sonnerToast.success(message, config);
 	},
 	error: (message: string, options?: any) => {
+		if (typeof message !== "string" || !message.trim()) return;
+		if (isDuplicateToast(message, "error")) return;
+
 		const config = { ...toastConfig, ...options };
 		return sonnerToast.error(message, config);
 	},
 	warning: (message: string, options?: any) => {
+		if (typeof message !== "string" || !message.trim()) return;
+		if (isDuplicateToast(message, "warning")) return;
+
 		const config = { ...toastConfig, ...options };
 		return sonnerToast.warning(message, config);
 	},
 	info: (message: string, options?: any) => {
+		if (typeof message !== "string" || !message.trim()) return;
+		if (isDuplicateToast(message, "info")) return;
+
 		const config = { ...toastConfig, ...options };
 		return sonnerToast.info(message, config);
 	},
 	// Default toast
 	show: (message: string, options?: any) => {
+		if (typeof message !== "string" || !message.trim()) return;
+		if (isDuplicateToast(message, "default")) return;
+
 		const config = { ...toastConfig, ...options };
 		return sonnerToast(message, config);
 	},

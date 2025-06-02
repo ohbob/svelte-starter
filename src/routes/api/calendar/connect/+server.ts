@@ -10,15 +10,16 @@ export const GET: RequestHandler = async ({ request, cookies }) => {
 		throw redirect(302, "/auth/signin");
 	}
 
-	// Get current company from cookies (correct cookie name)
+	// Get current company from cookies to verify user has a company selected
 	const selectedCompanyId = cookies.get("selectedCompanyId");
 
 	if (!selectedCompanyId) {
 		throw redirect(302, "/app/calendar?error=no_company");
 	}
 
+	// Use userId for calendar integration (shared across companies)
 	const calendarManager = new CalendarManager();
-	const authUrl = calendarManager.generateAuthUrl(selectedCompanyId);
+	const authUrl = calendarManager.generateAuthUrl(session.user.id);
 
 	throw redirect(302, authUrl);
 };
