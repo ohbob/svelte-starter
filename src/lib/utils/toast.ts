@@ -1,9 +1,10 @@
+import { UI_CONSTANTS } from "$lib/constants";
 import { toast as sonnerToast } from "svelte-sonner";
 
 // Toast configuration
 const toastConfig = {
 	position: "top-right" as const,
-	duration: 4000,
+	duration: UI_CONSTANTS.TOAST_DURATION,
 	closeButton: true,
 	toastOptions: {
 		classes: {
@@ -25,13 +26,12 @@ interface ToastMessage {
 }
 
 const recentToasts: ToastMessage[] = [];
-const DEDUP_WINDOW = 3000; // 3 seconds window for deduplication
 
 function isDuplicateToast(message: string, type: string): boolean {
 	const now = Date.now();
 
 	// Clean up old messages outside the deduplication window
-	const cutoff = now - DEDUP_WINDOW;
+	const cutoff = now - UI_CONSTANTS.TOAST_DEDUP_WINDOW;
 	for (let i = recentToasts.length - 1; i >= 0; i--) {
 		if (recentToasts[i].timestamp < cutoff) {
 			recentToasts.splice(i, 1);

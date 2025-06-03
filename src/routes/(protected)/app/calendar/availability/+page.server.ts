@@ -1,6 +1,6 @@
 import { auth } from "$lib/server/auth";
 import { CalendarManager } from "$lib/server/calendar";
-import { SchedulingManager } from "$lib/server/scheduling";
+import { AvailabilityService } from "$lib/server/services";
 import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -18,12 +18,12 @@ export const load: PageServerLoad = async ({ parent }) => {
 
 	try {
 		const calendarManager = new CalendarManager();
-		const schedulingManager = new SchedulingManager();
+		const availabilityService = new AvailabilityService();
 
 		// Load calendar status (user-based) and availability templates (company-based)
 		const [calendarStatus, companyAvailabilityTemplates] = await Promise.all([
 			calendarManager.getCalendarStatusByCompany(currentCompany.id),
-			schedulingManager.getAvailabilityTemplates(currentCompany.id),
+			availabilityService.getTemplates(currentCompany.id),
 		]);
 
 		return {
@@ -71,9 +71,9 @@ export const actions: Actions = {
 
 		try {
 			const slots = JSON.parse(slotsData);
-			const schedulingManager = new SchedulingManager();
+			const availabilityService = new AvailabilityService();
 
-			await schedulingManager.createAvailabilityTemplate({
+			await availabilityService.createTemplate({
 				companyId: selectedCompanyId,
 				name,
 				description,
@@ -118,9 +118,9 @@ export const actions: Actions = {
 
 		try {
 			const slots = JSON.parse(slotsData);
-			const schedulingManager = new SchedulingManager();
+			const availabilityService = new AvailabilityService();
 
-			await schedulingManager.updateAvailabilityTemplate(templateId, selectedCompanyId, {
+			await availabilityService.updateTemplate(templateId, selectedCompanyId, {
 				name,
 				description,
 				isDefault,
@@ -155,8 +155,8 @@ export const actions: Actions = {
 		}
 
 		try {
-			const schedulingManager = new SchedulingManager();
-			await schedulingManager.deleteAvailabilityTemplate(templateId, selectedCompanyId);
+			const availabilityService = new AvailabilityService();
+			await availabilityService.deleteTemplate(templateId, selectedCompanyId);
 
 			return { success: true, message: "Availability template deleted successfully!" };
 		} catch (error) {
