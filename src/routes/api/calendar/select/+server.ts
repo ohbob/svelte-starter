@@ -1,13 +1,19 @@
 import { auth } from "$lib/server/auth";
-import { CalendarManager } from "$lib/server/calendar";
+import { CalendarIntegrationService } from "$lib/server/services";
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, cookies }) => {
 	const session = await auth.api.getSession({ headers: request.headers });
 
 	if (!session?.user?.id) {
 		return json({ error: "Unauthorized" }, { status: 401 });
+	}
+
+	const selectedCompanyId = cookies.get("selectedCompanyId");
+
+	if (!selectedCompanyId) {
+		return json({ error: "No company selected" }, { status: 400 });
 	}
 
 	try {
@@ -17,11 +23,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			return json({ error: "Calendar ID is required" }, { status: 400 });
 		}
 
-		const calendarManager = new CalendarManager();
-		await calendarManager.selectCalendar(session.user.id, calendarId);
+		const calendarIntegrationService = new CalendarIntegrationService();
+		await calendarIntegrationService.selectCalendar(selectedCompanyId, calendarId);
 
 		// Return updated integration
-		const integration = await calendarManager.getIntegration(session.user.id);
+		const integration = await calendarIntegrationService.getCalendarIntegration(selectedCompanyId);
 
 		return json({ integration });
 	} catch (error) {

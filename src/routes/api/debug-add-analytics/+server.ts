@@ -1,37 +1,29 @@
-import { trackView } from "$lib/server/analytics";
+import { AnalyticsService } from "$lib/server/services";
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, cookies }) => {
 	try {
-		const { companyId, views = 5 } = await request.json();
+		const { companyId, path, referrer } = await request.json();
 
-		if (!companyId) {
-			return json({ error: "companyId required" }, { status: 400 });
+		if (!companyId || !path) {
+			return json({ error: "Missing required fields" }, { status: 400 });
 		}
 
-		// Add some test analytics data
-		const promises = [];
-		for (let i = 0; i < views; i++) {
-			promises.push(
-				trackView(
-					companyId,
-					`/test-page-${i}`,
-					i % 2 === 0 ? "https://google.com" : "direct",
-					"Mozilla/5.0 Test Browser",
-					"127.0.0.1"
-				)
-			);
-		}
+		const analyticsService = new AnalyticsService();
 
-		await Promise.all(promises);
+		// Track the view
+		await analyticsService.trackView(
+			companyId,
+			path,
+			referrer,
+			request.headers.get("user-agent") || undefined,
+			request.headers.get("x-forwarded-for") || "127.0.0.1"
+		);
 
-		return json({
-			success: true,
-			message: `Added ${views} test analytics records for company ${companyId}`,
-		});
+		return json({ success: true });
 	} catch (error) {
-		console.error("Debug add analytics error:", error);
-		return json({ error: "Failed to add analytics data" }, { status: 500 });
+		console.error("Error adding analytics:", error);
+		return json({ error: "Failed to add analytics" }, { status: 500 });
 	}
 };

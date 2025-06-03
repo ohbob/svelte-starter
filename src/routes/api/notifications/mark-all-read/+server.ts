@@ -1,5 +1,5 @@
 import { auth } from "$lib/server/auth";
-import { NotificationsManager } from "$lib/server/notifications";
+import { NotificationService } from "$lib/server/services";
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 
@@ -13,7 +13,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	try {
-		await NotificationsManager.markAllAsRead(session.user.id);
+		const notificationService = new NotificationService();
+		await notificationService.markAllAsRead(session.user.id);
 		return json({ success: true });
 	} catch (error) {
 		console.error("Error marking all notifications as read:", error);

@@ -1,9 +1,7 @@
 import { auth } from "$lib/server/auth";
-import { SchedulingManager } from "$lib/server/scheduling";
+import { MeetingTypeService } from "$lib/server/services";
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
-
-const schedulingManager = new SchedulingManager();
 
 export const PUT: RequestHandler = async ({ request, params }) => {
 	const session = await auth.api.getSession({ headers: request.headers });
@@ -21,7 +19,8 @@ export const PUT: RequestHandler = async ({ request, params }) => {
 			return json({ error: "Name and duration are required" }, { status: 400 });
 		}
 
-		const meetingType = await schedulingManager.updateMeetingType(meetingTypeId, session.user.id, {
+		const meetingTypeService = new MeetingTypeService();
+		const meetingType = await meetingTypeService.update(meetingTypeId, session.user.id, {
 			name: data.name,
 			description: data.description,
 			duration: parseInt(data.duration),
@@ -52,7 +51,8 @@ export const DELETE: RequestHandler = async ({ request, params }) => {
 	try {
 		const meetingTypeId = params.id;
 
-		await schedulingManager.deleteMeetingType(meetingTypeId, session.user.id);
+		const meetingTypeService = new MeetingTypeService();
+		await meetingTypeService.delete(meetingTypeId, session.user.id);
 
 		return json({ success: true });
 	} catch (error) {

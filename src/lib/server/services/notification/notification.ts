@@ -1,12 +1,18 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import { db } from "../../db";
-import { notifications } from "../../schema";
+import { notifications, type Notification } from "../../schema";
 
 export interface CreateNotificationData {
 	userId: string;
 	title: string;
-	message: string;
+	message?: string;
 	type: "success" | "error" | "warning" | "info";
+}
+
+export interface GetNotificationsOptions {
+	limit?: number;
+	offset?: number;
+	unreadOnly?: boolean;
 }
 
 export class NotificationService {
@@ -16,20 +22,37 @@ export class NotificationService {
 			.values({
 				userId: data.userId,
 				title: data.title,
-				message: data.message,
+				message: data.message || "",
 				type: data.type,
 			})
 			.returning();
 
+		// Keep only latest 100 notifications per user
+		await this.cleanupOldNotifications(data.userId);
+
 		return notification[0];
 	}
 
-	async getByUser(userId: string, limit: number = 50) {
-		return await db.query.notifications.findMany({
-			where: eq(notifications.userId, userId),
-			orderBy: [desc(notifications.createdAt)],
-			limit,
-		});
+	async getByUser(userId: string, options: GetNotificationsOptions = {}) {
+		const { limit = 20, offset = 0, unreadOnly = false } = options;
+
+		if (unreadOnly) {
+			return await db
+				.select()
+				.from(notifications)
+				.where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)))
+				.orderBy(desc(notifications.createdAt))
+				.limit(limit)
+				.offset(offset);
+		}
+
+		return await db
+			.select()
+			.from(notifications)
+			.where(eq(notifications.userId, userId))
+			.orderBy(desc(notifications.createdAt))
+			.limit(limit)
+			.offset(offset);
 	}
 
 	async getUnreadByUser(userId: string) {
@@ -37,6 +60,15 @@ export class NotificationService {
 			where: and(eq(notifications.userId, userId), eq(notifications.isRead, false)),
 			orderBy: [desc(notifications.createdAt)],
 		});
+	}
+
+	async getUnreadCount(userId: string): Promise<number> {
+		const [result] = await db
+			.select({ count: count() })
+			.from(notifications)
+			.where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+
+		return result.count;
 	}
 
 	async markAsRead(notificationId: string, userId: string) {
@@ -92,5 +124,62 @@ export class NotificationService {
 		);
 
 		return deleted;
+	}
+
+	// Clean up old notifications (keep only latest 100)
+	private async cleanupOldNotifications(userId: string): Promise<void> {
+		const userNotifications = await db
+			.select({ id: notifications.id })
+			.from(notifications)
+			.where(eq(notifications.userId, userId))
+			.orderBy(desc(notifications.createdAt))
+			.offset(100); // Skip the latest 100
+
+		if (userNotifications.length > 0) {
+			const idsToDelete = userNotifications.map((n) => n.id);
+			await db.delete(notifications).where(
+				and(
+					eq(notifications.userId, userId)
+					// Delete notifications not in the latest 100
+				)
+			);
+		}
+	}
+
+	// Helper methods for different notification types
+	async success(title: string, message: string = "", userId: string): Promise<Notification> {
+		return this.create({
+			userId,
+			title,
+			message,
+			type: "success",
+		});
+	}
+
+	async error(title: string, message: string = "", userId: string): Promise<Notification> {
+		return this.create({
+			userId,
+			title,
+			message,
+			type: "error",
+		});
+	}
+
+	async warning(title: string, message: string = "", userId: string): Promise<Notification> {
+		return this.create({
+			userId,
+			title,
+			message,
+			type: "warning",
+		});
+	}
+
+	async info(title: string, message: string = "", userId: string): Promise<Notification> {
+		return this.create({
+			userId,
+			title,
+			message,
+			type: "info",
+		});
 	}
 }

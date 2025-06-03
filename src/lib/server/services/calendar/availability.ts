@@ -1,13 +1,14 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "../../db";
-import { notification } from "../../notifications";
 import {
 	availability,
 	availabilitySlots,
 	availabilityTemplates,
 	companies,
+	meetingTypeAvailabilityTemplates,
 	meetingTypes,
 } from "../../schema";
+import { NotificationService } from "../notification";
 
 export interface AvailabilitySlot {
 	dayOfWeek: number;
@@ -27,6 +28,10 @@ export interface UpdateAvailabilityTemplateData {
 	name?: string;
 	description?: string;
 	isDefault?: boolean;
+	timezone?: string;
+	bufferBefore?: number;
+	bufferAfter?: number;
+	selectedCalendarId?: string | null;
 	slots?: AvailabilitySlot[];
 }
 
@@ -54,10 +59,11 @@ export class AvailabilityService {
 			);
 		}
 
-		await notification.success(
+		const notificationService = new NotificationService();
+		await notificationService.success(
 			"Availability Updated",
 			`Availability for ${company.name} has been updated successfully.`,
-			{ userId }
+			userId
 		);
 	}
 
@@ -143,20 +149,35 @@ export class AvailabilityService {
 		return updated[0];
 	}
 
-	async deleteTemplate(templateId: string, companyId: string) {
+	async deleteTemplate(templateId: string, companyId: string, userId: string) {
 		// Verify company owns the template
 		const template = await this.verifyTemplateOwnership(templateId, companyId);
 
 		// Check if any meeting types are using this template
 		const meetingTypesUsingTemplate = await db.query.meetingTypes.findMany({
-			where: and(
-				eq(meetingTypes.availabilityTemplateId, templateId),
-				eq(meetingTypes.isActive, true)
-			),
+			where: eq(meetingTypes.companyId, companyId),
+			with: {
+				availabilityTemplates: {
+					where: eq(meetingTypeAvailabilityTemplates.availabilityTemplateId, templateId),
+				},
+			},
 		});
 
-		if (meetingTypesUsingTemplate.length > 0) {
-			throw new Error("Cannot delete availability template that is being used by meeting types");
+		const activeUsingTemplate = meetingTypesUsingTemplate.filter(
+			(mt) => mt.isActive && mt.availabilityTemplates.length > 0
+		);
+
+		if (activeUsingTemplate.length > 0) {
+			const notificationService = new NotificationService();
+			const meetingTypeNames = activeUsingTemplate.map((mt) => mt.name).join(", ");
+
+			await notificationService.error(
+				"Cannot Delete Template",
+				`The availability template "${template.name}" is currently being used by the following meeting types: ${meetingTypeNames}. Please update or delete these meeting types first.`,
+				userId
+			);
+
+			return null; // Return null to indicate deletion was not performed
 		}
 
 		// Soft delete the template
@@ -165,6 +186,13 @@ export class AvailabilityService {
 			.set({ isActive: false, updatedAt: new Date() })
 			.where(eq(availabilityTemplates.id, templateId))
 			.returning();
+
+		const notificationService = new NotificationService();
+		await notificationService.success(
+			"Template Deleted",
+			`Availability template "${template.name}" has been deleted successfully.`,
+			userId
+		);
 
 		return deleted[0];
 	}
@@ -214,10 +242,120 @@ export class AvailabilityService {
 			),
 			with: {
 				slots: {
+					where: eq(availabilitySlots.isActive, true),
 					orderBy: [asc(availabilitySlots.dayOfWeek), asc(availabilitySlots.startTime)],
 				},
 			},
 		});
+	}
+
+	// Get combined availability from multiple templates for a meeting type
+	async getCombinedAvailabilityForMeetingType(meetingTypeId: string) {
+		// Get the meeting type with its availability templates
+		const meetingType = await db.query.meetingTypes.findFirst({
+			where: eq(meetingTypes.id, meetingTypeId),
+			with: {
+				availabilityTemplates: {
+					with: {
+						availabilityTemplate: {
+							with: {
+								slots: {
+									where: eq(availabilitySlots.isActive, true),
+									orderBy: [asc(availabilitySlots.dayOfWeek), asc(availabilitySlots.startTime)],
+								},
+							},
+						},
+					},
+				},
+			},
+		});
+
+		if (!meetingType) {
+			throw new Error("Meeting type not found");
+		}
+
+		// Combine all slots from all templates
+		const allSlots: AvailabilitySlot[] = [];
+
+		for (const junction of meetingType.availabilityTemplates) {
+			const template = junction.availabilityTemplate;
+			for (const slot of template.slots) {
+				allSlots.push({
+					dayOfWeek: slot.dayOfWeek,
+					startTime: slot.startTime,
+					endTime: slot.endTime,
+				});
+			}
+		}
+
+		// Sort and merge overlapping slots for the same day
+		const mergedSlots = this.mergeOverlappingSlots(allSlots);
+
+		return mergedSlots;
+	}
+
+	// Helper method to merge overlapping time slots for the same day
+	private mergeOverlappingSlots(slots: AvailabilitySlot[]): AvailabilitySlot[] {
+		if (slots.length === 0) return [];
+
+		// Group by day of week
+		const slotsByDay = new Map<number, AvailabilitySlot[]>();
+
+		for (const slot of slots) {
+			if (!slotsByDay.has(slot.dayOfWeek)) {
+				slotsByDay.set(slot.dayOfWeek, []);
+			}
+			slotsByDay.get(slot.dayOfWeek)!.push(slot);
+		}
+
+		const mergedSlots: AvailabilitySlot[] = [];
+
+		// Process each day
+		for (const [dayOfWeek, daySlots] of slotsByDay) {
+			// Sort slots by start time
+			daySlots.sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+			const merged: AvailabilitySlot[] = [];
+			let current = daySlots[0];
+
+			for (let i = 1; i < daySlots.length; i++) {
+				const next = daySlots[i];
+
+				// Check if current and next overlap or are adjacent
+				if (this.timeToMinutes(next.startTime) <= this.timeToMinutes(current.endTime)) {
+					// Merge: extend current to the later end time
+					current = {
+						dayOfWeek,
+						startTime: current.startTime,
+						endTime:
+							this.timeToMinutes(next.endTime) > this.timeToMinutes(current.endTime)
+								? next.endTime
+								: current.endTime,
+					};
+				} else {
+					// No overlap: add current to merged and start new current
+					merged.push(current);
+					current = next;
+				}
+			}
+
+			// Add the last slot
+			merged.push(current);
+			mergedSlots.push(...merged);
+		}
+
+		return mergedSlots.sort((a, b) => {
+			if (a.dayOfWeek !== b.dayOfWeek) {
+				return a.dayOfWeek - b.dayOfWeek;
+			}
+			return a.startTime.localeCompare(b.startTime);
+		});
+	}
+
+	// Helper to convert time string to minutes for comparison
+	private timeToMinutes(timeStr: string): number {
+		const [hours, minutes] = timeStr.split(":").map(Number);
+		return hours * 60 + minutes;
 	}
 
 	// === PRIVATE METHODS ===

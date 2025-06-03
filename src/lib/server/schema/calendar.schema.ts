@@ -54,16 +54,13 @@ export const meetingTypes = pgTable("meeting_types", {
 	companyId: text("company_id")
 		.notNull()
 		.references(() => companies.id, { onDelete: "cascade" }),
-	availabilityTemplateId: uuid("availability_template_id").references(
-		() => availabilityTemplates.id,
-		{ onDelete: "set null" }
-	),
 	name: text("name").notNull(), // "30 Minute Meeting"
 	slug: text("slug").notNull(), // "30min-meeting"
 	description: text("description"),
 	duration: integer("duration").notNull(), // minutes
 	price: integer("price").default(0), // cents, 0 = free
 	color: text("color").default("#3b82f6"), // hex color
+	selectedCalendarId: text("selected_calendar_id"), // Google Calendar ID to create events in
 	isActive: boolean("is_active").notNull().default(true),
 	requiresConfirmation: boolean("requires_confirmation").notNull().default(false),
 	bufferTimeBefore: integer("buffer_time_before").default(0), // minutes
@@ -71,6 +68,18 @@ export const meetingTypes = pgTable("meeting_types", {
 	maxBookingsPerDay: integer("max_bookings_per_day"),
 	createdAt: timestamp("created_at").notNull().defaultNow(),
 	updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Junction table for meeting types and availability templates (many-to-many)
+export const meetingTypeAvailabilityTemplates = pgTable("meeting_type_availability_templates", {
+	id: uuid("id").primaryKey().defaultRandom(),
+	meetingTypeId: uuid("meeting_type_id")
+		.notNull()
+		.references(() => meetingTypes.id, { onDelete: "cascade" }),
+	availabilityTemplateId: uuid("availability_template_id")
+		.notNull()
+		.references(() => availabilityTemplates.id, { onDelete: "cascade" }),
+	createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 // Legacy availability table - keeping for backward compatibility during migration
@@ -151,7 +160,7 @@ export const availabilityTemplatesRelations = relations(availabilityTemplates, (
 		references: [companies.id],
 	}),
 	slots: many(availabilitySlots),
-	meetingTypes: many(meetingTypes),
+	meetingTypes: many(meetingTypeAvailabilityTemplates),
 }));
 
 export const availabilitySlotsRelations = relations(availabilitySlots, ({ one }) => ({
@@ -166,13 +175,24 @@ export const meetingTypesRelations = relations(meetingTypes, ({ one, many }) => 
 		fields: [meetingTypes.companyId],
 		references: [companies.id],
 	}),
-	availabilityTemplate: one(availabilityTemplates, {
-		fields: [meetingTypes.availabilityTemplateId],
-		references: [availabilityTemplates.id],
-	}),
 	bookings: many(bookings),
 	questions: many(bookingQuestions),
+	availabilityTemplates: many(meetingTypeAvailabilityTemplates),
 }));
+
+export const meetingTypeAvailabilityTemplatesRelations = relations(
+	meetingTypeAvailabilityTemplates,
+	({ one }) => ({
+		meetingType: one(meetingTypes, {
+			fields: [meetingTypeAvailabilityTemplates.meetingTypeId],
+			references: [meetingTypes.id],
+		}),
+		availabilityTemplate: one(availabilityTemplates, {
+			fields: [meetingTypeAvailabilityTemplates.availabilityTemplateId],
+			references: [availabilityTemplates.id],
+		}),
+	})
+);
 
 export const bookingsRelations = relations(bookings, ({ one, many }) => ({
 	meetingType: one(meetingTypes, {

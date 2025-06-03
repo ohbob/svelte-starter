@@ -1,87 +1,19 @@
 <script>
 	import { Button } from "$lib/components/ui/button";
 
-	let { class: className = "" } = $props();
+	let {
+		class: className = "",
+		notifications = [],
+		unreadCount = 0,
+		onMarkAsRead = () => {},
+		onMarkAllAsRead = () => {},
+		onDelete = () => {},
+	} = $props();
 
 	let isOpen = $state(false);
-	let notifications = $state([]);
-	let unreadCount = $state(0);
-	let loading = $state(false);
-
-	// Fetch notifications
-	const fetchNotifications = async () => {
-		loading = true;
-		try {
-			const response = await fetch("/api/notifications?limit=10");
-			if (response.ok) {
-				const data = await response.json();
-				notifications = data.notifications;
-				unreadCount = data.unreadCount;
-			}
-		} catch (error) {
-			console.error("Error fetching notifications:", error);
-		} finally {
-			loading = false;
-		}
-	};
-
-	// Mark notification as read
-	const markAsRead = async (notificationId) => {
-		try {
-			const response = await fetch(`/api/notifications/${notificationId}`, {
-				method: "PATCH",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ isRead: true }),
-			});
-
-			if (response.ok) {
-				notifications = notifications.map((n) =>
-					n.id === notificationId ? { ...n, isRead: true } : n
-				);
-				unreadCount = Math.max(0, unreadCount - 1);
-			}
-		} catch (error) {
-			console.error("Error marking notification as read:", error);
-		}
-	};
-
-	// Mark all as read
-	const markAllAsRead = async () => {
-		try {
-			const response = await fetch("/api/notifications/mark-all-read", {
-				method: "POST",
-			});
-
-			if (response.ok) {
-				notifications = notifications.map((n) => ({ ...n, isRead: true }));
-				unreadCount = 0;
-			}
-		} catch (error) {
-			console.error("Error marking all notifications as read:", error);
-		}
-	};
-
-	// Delete notification
-	const deleteNotification = async (notificationId) => {
-		try {
-			const response = await fetch(`/api/notifications/${notificationId}`, {
-				method: "DELETE",
-			});
-
-			if (response.ok) {
-				const notification = notifications.find((n) => n.id === notificationId);
-				notifications = notifications.filter((n) => n.id !== notificationId);
-				if (notification && !notification.isRead) {
-					unreadCount = Math.max(0, unreadCount - 1);
-				}
-			}
-		} catch (error) {
-			console.error("Error deleting notification:", error);
-		}
-	};
 
 	// Format time
-	const formatTime = (dateString) => {
+	function formatTime(dateString) {
 		const date = new Date(dateString);
 		const now = new Date();
 		const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
@@ -90,10 +22,10 @@
 		if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
 		if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
 		return `${Math.floor(diffInMinutes / 1440)}d ago`;
-	};
+	}
 
 	// Get icon for notification type
-	const getTypeIcon = (type) => {
+	function getTypeIcon(type) {
 		switch (type) {
 			case "success":
 				return "✓";
@@ -104,10 +36,10 @@
 			default:
 				return "ℹ";
 		}
-	};
+	}
 
 	// Get color for notification type
-	const getTypeColor = (type) => {
+	function getTypeColor(type) {
 		switch (type) {
 			case "success":
 				return "text-green-600";
@@ -118,42 +50,37 @@
 			default:
 				return "text-blue-600";
 		}
-	};
+	}
 
 	// Close dropdown when clicking outside
-	const handleClickOutside = (event) => {
+	function handleClickOutside(event) {
 		const target = event.target;
 		if (!target.closest("[data-notification-center]")) {
 			isOpen = false;
 		}
-	};
+	}
 
 	// Handle toggle
-	const handleToggle = () => {
+	function handleToggle() {
 		isOpen = !isOpen;
-		if (isOpen) fetchNotifications();
-	};
+	}
 
 	// Handle view all
-	const handleViewAll = () => {
+	function handleViewAll() {
 		isOpen = false;
 		window.location.href = "/app/notifications";
-	};
+	}
 
-	// Handle mark as read
-	const handleMarkAsRead = (notificationId) => {
-		return () => markAsRead(notificationId);
-	};
+	function handleMarkAsRead(notificationId) {
+		return () => onMarkAsRead(notificationId);
+	}
 
-	// Handle delete notification
-	const handleDeleteNotification = (notificationId) => {
-		return () => deleteNotification(notificationId);
-	};
+	function handleDelete(notificationId) {
+		return () => onDelete(notificationId);
+	}
 
 	$effect(() => {
-		fetchNotifications();
 		document.addEventListener("click", handleClickOutside);
-
 		return () => {
 			document.removeEventListener("click", handleClickOutside);
 		};
@@ -195,7 +122,7 @@
 					<Button
 						variant="ghost"
 						size="sm"
-						onclick={markAllAsRead}
+						onclick={onMarkAllAsRead}
 						class="text-sm text-blue-600 hover:text-blue-800"
 					>
 						Mark all read
@@ -205,12 +132,7 @@
 
 			<!-- Notifications List -->
 			<div class="max-h-96 overflow-y-auto">
-				{#if loading}
-					<div class="p-4 text-center text-gray-500">
-						<div class="mx-auto mb-2 h-5 w-5 animate-spin">⟳</div>
-						Loading notifications...
-					</div>
-				{:else if notifications.length === 0}
+				{#if notifications.length === 0}
 					<div class="p-8 text-center text-gray-500">
 						<div
 							class="mx-auto mb-4 flex h-12 w-12 items-center justify-center text-2xl text-gray-400"
@@ -275,7 +197,7 @@
 											<Button
 												variant="ghost"
 												size="sm"
-												onclick={handleDeleteNotification(notification.id)}
+												onclick={handleDelete(notification.id)}
 												class="h-6 w-6 p-0 text-red-600 hover:text-red-800"
 												title="Delete"
 											>

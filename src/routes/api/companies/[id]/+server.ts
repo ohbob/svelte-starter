@@ -1,8 +1,6 @@
 import { auth } from "$lib/server/auth";
-import { db } from "$lib/server/db";
-import { companies } from "$lib/server/schema/companies.schema";
+import { CompanyService } from "$lib/server/services";
 import { json } from "@sveltejs/kit";
-import { and, eq, ne } from "drizzle-orm";
 
 // Helper function to validate slug format
 function isValidSlug(slug: string): boolean {
@@ -29,19 +27,17 @@ export async function PUT({ request, params }) {
 		const data = await request.json();
 		console.log("📝 Update data received:", data);
 
-		// Verify the company belongs to the user
-		const existingCompany = await db
-			.select()
-			.from(companies)
-			.where(and(eq(companies.id, id), eq(companies.userId, session.user.id)))
-			.limit(1);
+		const companyService = new CompanyService();
 
-		if (!existingCompany.length) {
+		// Verify the company belongs to the user
+		const existingCompany = await companyService.getCompanyById(id);
+
+		if (!existingCompany || existingCompany.userId !== session.user.id) {
 			console.log("❌ Company not found for user");
 			return json({ error: "Company not found" }, { status: 404 });
 		}
 
-		console.log("✅ Company found:", existingCompany[0].name);
+		console.log("✅ Company found:", existingCompany.name);
 
 		// Validate slug if provided
 		if (data.slug) {
@@ -60,13 +56,9 @@ export async function PUT({ request, params }) {
 			}
 
 			// Check if slug is unique (excluding current company)
-			const slugExists = await db
-				.select()
-				.from(companies)
-				.where(and(eq(companies.slug, data.slug), ne(companies.id, id)))
-				.limit(1);
+			const slugExists = await companyService.checkSlugExists(data.slug, id);
 
-			if (slugExists.length) {
+			if (slugExists) {
 				console.log("❌ Slug already exists");
 				return json(
 					{
@@ -90,27 +82,8 @@ export async function PUT({ request, params }) {
 			);
 		}
 
-		// Prepare update data
-		const updateData = {
-			...data,
-			updatedAt: new Date(),
-		};
-
-		// Remove any undefined values
-		Object.keys(updateData).forEach((key) => {
-			if (updateData[key] === undefined) {
-				delete updateData[key];
-			}
-		});
-
-		console.log("📤 Updating company with data:", updateData);
-
-		// Update company
-		const [updatedCompany] = await db
-			.update(companies)
-			.set(updateData)
-			.where(eq(companies.id, id))
-			.returning();
+		// Update company using service
+		const updatedCompany = await companyService.updateCompany(id, data);
 
 		console.log("✅ Company updated successfully:", updatedCompany.name);
 
@@ -122,6 +95,12 @@ export async function PUT({ request, params }) {
 	} catch (err: any) {
 		console.error("❌ Error updating company:", err);
 		console.error("Stack trace:", err.stack);
+
+		// Handle validation errors from service
+		if (err.message.includes("Invalid slug") || err.message.includes("already taken")) {
+			return json({ error: err.message }, { status: 400 });
+		}
+
 		return json(
 			{
 				error: "Failed to update company. Please try again.",

@@ -1,9 +1,7 @@
 import { auth } from "$lib/server/auth";
-import { SchedulingManager } from "$lib/server/scheduling";
+import { MeetingTypeService } from "$lib/server/services";
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
-
-const schedulingManager = new SchedulingManager();
 
 export const GET: RequestHandler = async ({ request, url }) => {
 	const session = await auth.api.getSession({ headers: request.headers });
@@ -14,14 +12,15 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
 	try {
 		const companyId = url.searchParams.get("companyId");
+		const meetingTypeService = new MeetingTypeService();
 
 		let meetingTypes;
 		if (companyId) {
 			// Get meeting types for specific company
-			meetingTypes = await schedulingManager.getCompanyMeetingTypes(companyId);
+			meetingTypes = await meetingTypeService.getByCompany(companyId);
 		} else {
 			// Get meeting types for all user's companies
-			meetingTypes = await schedulingManager.getMeetingTypes(session.user.id);
+			meetingTypes = await meetingTypeService.getByUser(session.user.id);
 		}
 
 		return json({ meetingTypes });
@@ -46,7 +45,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			return json({ error: "Name, duration, and companyId are required" }, { status: 400 });
 		}
 
-		const meetingType = await schedulingManager.createMeetingType({
+		const meetingTypeService = new MeetingTypeService();
+		const meetingType = await meetingTypeService.create({
 			companyId: data.companyId,
 			userId: session.user.id,
 			name: data.name,

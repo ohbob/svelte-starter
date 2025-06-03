@@ -1,35 +1,58 @@
-import { getAnalytics } from "$lib/server/analytics";
 import { auth } from "$lib/server/auth";
 import { db } from "$lib/server/db";
 import { companies } from "$lib/server/schema";
+import { AnalyticsService } from "$lib/server/services";
 import { fail } from "@sveltejs/kit";
 import { and, eq } from "drizzle-orm";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ parent }) => {
-	// Get data from parent layout
-	const { currentCompany } = await parent();
+	// Get session and company data from parent layouts
+	const { user, currentCompany } = await parent();
 
-	// Load analytics data for current company if it exists
-	let analyticsData = null;
-	let todaysViews = 0;
-
-	if (currentCompany?.id) {
-		try {
-			analyticsData = await getAnalytics(currentCompany.id as string);
-			// You can add more dashboard-specific data here
-		} catch (error) {
-			console.warn("Failed to load analytics data for dashboard:", error);
-			// Continue without analytics data rather than failing
-		}
+	if (!user || !currentCompany?.id) {
+		return {
+			analytics: {
+				totalViews: 0,
+				todayViews: 0,
+				recentViews: 0,
+				dailyViews: [],
+				topReferrers: [],
+				todayReferrers: [],
+			},
+		};
 	}
 
-	return {
-		currentCompanyId: currentCompany?.id || null,
-		analytics: analyticsData,
-		todaysViews,
-		services: [], // Placeholder for future services implementation
-	};
+	try {
+		const analyticsService = new AnalyticsService();
+
+		// Calculate date range (last 30 days)
+		const endDate = new Date();
+		const startDate = new Date();
+		startDate.setDate(startDate.getDate() - 30);
+
+		const analytics = await analyticsService.getCompanyAnalytics(
+			currentCompany.id,
+			startDate,
+			endDate
+		);
+
+		return {
+			analytics,
+		};
+	} catch (error) {
+		console.error("Error loading dashboard analytics:", error);
+		return {
+			analytics: {
+				totalViews: 0,
+				todayViews: 0,
+				recentViews: 0,
+				dailyViews: [],
+				topReferrers: [],
+				todayReferrers: [],
+			},
+		};
+	}
 };
 
 export const actions: Actions = {

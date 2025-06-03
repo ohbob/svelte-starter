@@ -1,5 +1,5 @@
 import { auth } from "$lib/server/auth";
-import { CalendarManager } from "$lib/server/calendar";
+import { CalendarIntegrationService } from "$lib/server/services";
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 
@@ -18,8 +18,9 @@ export const GET: RequestHandler = async ({ request, cookies }) => {
 			return json({ error: "No company selected" }, { status: 400 });
 		}
 
-		const calendarManager = new CalendarManager();
-		const availableCalendars = await calendarManager.getAvailableCalendars(selectedCompanyId);
+		const calendarIntegrationService = new CalendarIntegrationService();
+		const availableCalendars =
+			await calendarIntegrationService.getAvailableCalendars(selectedCompanyId);
 
 		return json({ calendars: availableCalendars });
 	} catch (error) {

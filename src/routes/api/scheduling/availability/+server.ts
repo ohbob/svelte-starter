@@ -1,11 +1,9 @@
 import { auth } from "$lib/server/auth";
-import { SchedulingManager } from "$lib/server/scheduling";
+import { AvailabilityService } from "$lib/server/services";
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 
-const schedulingManager = new SchedulingManager();
-
-export const GET: RequestHandler = async ({ request }) => {
+export const GET: RequestHandler = async ({ request, url }) => {
 	const session = await auth.api.getSession({ headers: request.headers });
 
 	if (!session) {
@@ -13,7 +11,14 @@ export const GET: RequestHandler = async ({ request }) => {
 	}
 
 	try {
-		const availability = await schedulingManager.getAvailability(session.user.id);
+		const companyId = url.searchParams.get("companyId");
+
+		if (!companyId) {
+			return json({ error: "Company ID is required" }, { status: 400 });
+		}
+
+		const availabilityService = new AvailabilityService();
+		const availability = await availabilityService.getCompanyAvailability(companyId);
 		return json({ availability });
 	} catch (error) {
 		console.error("Error fetching availability:", error);
@@ -29,7 +34,11 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	try {
-		const { availability } = await request.json();
+		const { availability, companyId } = await request.json();
+
+		if (!companyId) {
+			return json({ error: "Company ID is required" }, { status: 400 });
+		}
 
 		// Validate availability data
 		if (!Array.isArray(availability)) {
@@ -49,7 +58,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 		}
 
-		await schedulingManager.setAvailability(session.user.id, availability);
+		const availabilityService = new AvailabilityService();
+		await availabilityService.setCompanyAvailability(companyId, session.user.id, availability);
 		return json({ success: true });
 	} catch (error) {
 		console.error("Error setting availability:", error);

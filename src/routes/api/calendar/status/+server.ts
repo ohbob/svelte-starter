@@ -1,12 +1,12 @@
 import { auth } from "$lib/server/auth";
-import { CalendarManager } from "$lib/server/calendar";
 import { db } from "$lib/server/db";
 import { companies } from "$lib/server/schema";
+import { CalendarIntegrationService } from "$lib/server/services";
 import { json } from "@sveltejs/kit";
 import { asc, eq } from "drizzle-orm";
 import type { RequestHandler } from "./$types";
 
-export const GET: RequestHandler = async ({ request, url, cookies }) => {
+export const GET: RequestHandler = async ({ request, cookies }) => {
 	const session = await auth.api.getSession({ headers: request.headers });
 
 	if (!session?.user?.id) {
@@ -40,8 +40,8 @@ export const GET: RequestHandler = async ({ request, url, cookies }) => {
 			});
 		}
 
-		const calendarManager = new CalendarManager();
-		const integration = await calendarManager.getIntegration(currentCompany.id);
+		const calendarIntegrationService = new CalendarIntegrationService();
+		const integration = await calendarIntegrationService.getCalendarIntegration(currentCompany.id);
 
 		if (!integration) {
 			return json({
@@ -51,12 +51,14 @@ export const GET: RequestHandler = async ({ request, url, cookies }) => {
 			});
 		}
 
-		// Only fetch available calendars if explicitly requested
-		const includeCalendars = url.searchParams.get("includeCalendars") === "true";
+		// Get available calendars
 		let availableCalendars = [];
-
-		if (includeCalendars) {
-			availableCalendars = await calendarManager.getAvailableCalendars(currentCompany.id);
+		try {
+			availableCalendars = await calendarIntegrationService.getAvailableCalendars(
+				currentCompany.id
+			);
+		} catch (error) {
+			console.error("Error fetching available calendars:", error);
 		}
 
 		return json({
@@ -66,6 +68,10 @@ export const GET: RequestHandler = async ({ request, url, cookies }) => {
 		});
 	} catch (error) {
 		console.error("Error checking calendar status:", error);
-		return json({ error: "Failed to check calendar status" }, { status: 500 });
+		return json({
+			isConnected: false,
+			integration: null,
+			availableCalendars: [],
+		});
 	}
 };

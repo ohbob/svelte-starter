@@ -1,8 +1,6 @@
 import { auth } from "$lib/server/auth";
-import { db } from "$lib/server/db";
-import { companies } from "$lib/server/schema";
+import { CompanyService } from "$lib/server/services";
 import { redirect } from "@sveltejs/kit";
-import { eq } from "drizzle-orm";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ request, parent }) => {
@@ -16,12 +14,10 @@ export const load: PageServerLoad = async ({ request, parent }) => {
 	const { currentCompany } = await parent();
 
 	try {
-		// Get user's companies directly
-		const userCompanies = await db
-			.select()
-			.from(companies)
-			.where(eq(companies.userId, session.user.id))
-			.orderBy(companies.createdAt);
+		const companyService = new CompanyService();
+
+		// Get user's companies
+		const userCompanies = await companyService.getUserCompanies(session.user.id);
 
 		return {
 			companies: userCompanies,

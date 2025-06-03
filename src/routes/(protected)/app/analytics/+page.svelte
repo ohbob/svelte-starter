@@ -1,29 +1,19 @@
 <script lang="ts">
 	let { data } = $props();
 
-	// Reactive state for analytics data from page load
-	let analyticsData = $state({
-		totalViews: 0,
-		recentViews: 0,
-		previousPeriodViews: 0,
-		todayViews: 0,
-		dailyViews: [],
-		topReferrers: [],
-	});
-	let userData = $state(null);
-
-	// Update analytics data when page data changes
-	$effect(() => {
-		analyticsData = data?.analytics || {
+	// Use derived values instead of state + effect to prevent infinite loops
+	const analyticsData = $derived(
+		data?.analytics || {
 			totalViews: 0,
 			recentViews: 0,
 			previousPeriodViews: 0,
 			todayViews: 0,
 			dailyViews: [],
 			topReferrers: [],
-		};
-		userData = data?.user;
-	});
+		}
+	);
+
+	const userData = $derived(data?.user);
 
 	// Derived values (computed from analyticsData)
 	const chartData = $derived(

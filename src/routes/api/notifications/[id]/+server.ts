@@ -1,5 +1,5 @@
 import { auth } from "$lib/server/auth";
-import { NotificationsManager } from "$lib/server/notifications";
+import { NotificationService } from "$lib/server/services";
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 
@@ -16,7 +16,8 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 		const { isRead } = await request.json();
 
 		if (isRead === true) {
-			await NotificationsManager.markAsRead(params.id, session.user.id);
+			const notificationService = new NotificationService();
+			await notificationService.markAsRead(params.id, session.user.id);
 		}
 
 		return json({ success: true });
@@ -36,7 +37,8 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
 	}
 
 	try {
-		await NotificationsManager.delete(params.id, session.user.id);
+		const notificationService = new NotificationService();
+		await notificationService.delete(params.id, session.user.id);
 		return json({ success: true });
 	} catch (error) {
 		console.error("Error deleting notification:", error);

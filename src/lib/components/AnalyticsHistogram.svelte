@@ -15,14 +15,8 @@
 		"#6b7280",
 	];
 
-	// Reactive state that updates when props change
-	let histogramDays = $state([]);
-	let maxViews = $state(1);
-	let yAxisLabels = $state([]);
-	let domainColors = $state(new Map());
-
-	// Update chart data when props change
-	$effect(() => {
+	// Use derived values instead of state + effect to prevent infinite loops
+	const domainColors = $derived(() => {
 		// Get top domains for color mapping
 		const topDomains = topReferrers
 			.slice(0, 8)
@@ -35,8 +29,10 @@
 			colorMap.set(domain, sourceColors[index % sourceColors.length]);
 		});
 		colorMap.set("direct", "#6b7280");
-		domainColors = colorMap;
+		return colorMap;
+	});
 
+	const histogramDays = $derived(() => {
 		// Create views map
 		const viewsMap = new Map();
 		dailyViews.forEach((item) => {
@@ -44,6 +40,12 @@
 			const dateKey = date.toISOString().split("T")[0];
 			viewsMap.set(dateKey, item.views);
 		});
+
+		// Get top domains for source breakdown
+		const topDomains = topReferrers
+			.slice(0, 8)
+			.map((r) => r.domain)
+			.filter((domain, index, arr) => arr.indexOf(domain) === index);
 
 		// Generate histogram data
 		const today = new Date();
@@ -75,7 +77,7 @@
 					sources.push({
 						domain,
 						views: Math.max(1, views),
-						color: colorMap.get(domain),
+						color: domainColors().get(domain),
 					});
 					remainingViews -= views;
 				}
@@ -95,13 +97,16 @@
 			});
 		}
 
-		histogramDays = days;
-		maxViews = Math.max(...days.map((d) => d.totalViews), 1);
+		return days;
+	});
 
+	const maxViews = $derived(Math.max(...histogramDays().map((d) => d.totalViews), 1));
+
+	const yAxisLabels = $derived(() => {
 		// Y-axis calculations
 		const yAxisSteps = 6;
 		const stepValue = maxViews / (yAxisSteps - 1);
-		yAxisLabels = Array.from({ length: yAxisSteps }, (_, i) => {
+		return Array.from({ length: yAxisSteps }, (_, i) => {
 			return Math.round(maxViews - i * stepValue);
 		});
 	});
@@ -136,12 +141,12 @@
 		<p class="text-sm text-gray-500">Daily views broken down by referrer source</p>
 	</div>
 	<div class="p-6">
-		{#if histogramDays.length > 0 && maxViews > 0}
+		{#if histogramDays().length > 0 && maxViews > 0}
 			<!-- Stacked Bar Chart -->
 			<div class="mb-4 flex gap-2">
 				<!-- Y-axis labels -->
 				<div class="flex h-64 w-12 flex-col justify-between py-2">
-					{#each yAxisLabels as value}
+					{#each yAxisLabels() as value}
 						<div class="text-right text-xs leading-none text-gray-500">
 							{formatViews(value)}
 						</div>
@@ -151,7 +156,7 @@
 				<!-- Chart area -->
 				<div class="relative h-64 flex-1 overflow-visible border-b-2 border-l-2 border-gray-300">
 					<div class="absolute inset-0 flex items-end justify-between overflow-visible px-1 pb-1">
-						{#each histogramDays as day}
+						{#each histogramDays() as day}
 							<div class="flex h-full flex-1 flex-col items-center justify-end">
 								<!-- Stacked Bar -->
 								{#if !day.isFuture && day.totalViews > 0}
@@ -186,8 +191,8 @@
 
 			<!-- X-axis labels -->
 			<div class="mb-6 ml-14 flex justify-between text-xs text-gray-500">
-				{#each histogramDays as day, i}
-					{#if i % 5 === 0 || day.isToday || i === histogramDays.length - 1}
+				{#each histogramDays() as day, i}
+					{#if i % 5 === 0 || day.isToday || i === histogramDays().length - 1}
 						<div class="text-center">
 							{day.date.getDate()}/{day.date.getMonth() + 1}
 						</div>
@@ -197,19 +202,23 @@
 
 			<!-- Legend -->
 			<div class="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
-				{#each Array.from(domainColors.entries()).slice(0, 8) as [domain, color]}
+				{#each Array.from(domainColors().entries()).slice(0, 8) as [domain, color]}
 					{#if domain !== "direct"}
 						<div class="flex items-center gap-2">
 							<div class="h-3 w-3 rounded" style:background-color={color}></div>
-							<span class="truncate text-gray-600">{domain}</span>
+							<span class="text-gray-600">{domain}</span>
 						</div>
 					{/if}
 				{/each}
+				<div class="flex items-center gap-2">
+					<div class="h-3 w-3 rounded bg-gray-500"></div>
+					<span class="text-gray-600">Direct</span>
+				</div>
 			</div>
 		{:else}
 			<div class="py-12 text-center">
 				<svg
-					class="mx-auto mb-4 h-12 w-12 text-gray-400"
+					class="mx-auto mb-4 h-16 w-16 text-gray-400"
 					fill="none"
 					stroke="currentColor"
 					viewBox="0 0 24 24"
@@ -219,34 +228,37 @@
 						stroke-linejoin="round"
 						stroke-width="2"
 						d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-					></path>
+					/>
 				</svg>
-				<h3 class="mb-2 text-lg font-medium text-gray-900">No traffic data</h3>
-				<p class="text-sm text-gray-500">Share your portfolio to start tracking visitors!</p>
+				<h3 class="mb-2 text-lg font-medium text-gray-900">No data yet</h3>
+				<p class="text-sm text-gray-500">
+					Traffic analytics will appear here when people visit your portfolio.
+				</p>
 			</div>
 		{/if}
 	</div>
 </div>
 
-<!-- Global Tooltip -->
+<!-- Tooltip -->
 {#if hoveredDay}
 	<div
-		class="pointer-events-none fixed z-50 rounded-md bg-gray-900 px-3 py-2 text-xs text-white shadow-xl"
-		style:left="{tooltipX}px"
-		style:top="{tooltipY - 60}px"
-		style:transform="translateX(-50%)"
+		class="pointer-events-none fixed z-50 rounded-lg border border-gray-200 bg-white p-3 shadow-lg"
+		style:left="{tooltipX - 100}px"
+		style:top="{tooltipY - 120}px"
 	>
-		<div class="font-medium">{hoveredDay.shortDate}</div>
-		<div class="text-gray-300">{hoveredDay.totalViews} total views</div>
-		{#if hoveredDay.sources.length > 0}
-			<div class="mt-1 space-y-1">
-				{#each hoveredDay.sources as source}
-					<div class="flex items-center gap-2">
-						<div class="h-2 w-2 rounded" style:background-color={source.color}></div>
-						<span>{source.domain}: {source.views}</span>
-					</div>
-				{/each}
+		<div class="mb-2 text-sm font-medium text-gray-900">
+			{hoveredDay.shortDate}
+		</div>
+		<div class="space-y-1">
+			<div class="text-xs text-gray-600">
+				Total: <span class="font-medium">{hoveredDay.totalViews} views</span>
 			</div>
-		{/if}
+			{#each hoveredDay.sources as source}
+				<div class="flex items-center gap-2 text-xs">
+					<div class="h-2 w-2 rounded" style:background-color={source.color}></div>
+					<span class="text-gray-600">{source.domain}: {source.views}</span>
+				</div>
+			{/each}
+		</div>
 	</div>
 {/if}

@@ -1,4 +1,4 @@
-import { cleanupOldAnalytics } from "$lib/server/analytics";
+import { AnalyticsService } from "$lib/server/services";
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 
@@ -12,12 +12,10 @@ export const POST: RequestHandler = async ({ request }) => {
 			return json({ error: "Unauthorized" }, { status: 401 });
 		}
 
-		// Get retention days from request body (default 120)
-		const body = await request.json().catch(() => ({}));
-		const retentionDays = body.retentionDays || 120;
+		const { retentionDays = 120 } = await request.json();
 
-		// Run cleanup
-		const result = await cleanupOldAnalytics(retentionDays);
+		const analyticsService = new AnalyticsService();
+		const result = await analyticsService.cleanupOldAnalytics(retentionDays);
 
 		return json({
 			success: true,
@@ -25,10 +23,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			result,
 		});
 	} catch (error) {
-		console.error("Analytics cleanup failed:", error);
-		return json(
-			{ error: "Cleanup failed", details: error instanceof Error ? error.message : String(error) },
-			{ status: 500 }
-		);
+		console.error("Analytics cleanup error:", error);
+		return json({ error: "Failed to cleanup analytics" }, { status: 500 });
 	}
 };

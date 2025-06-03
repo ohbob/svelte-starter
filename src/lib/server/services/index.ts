@@ -1,11 +1,17 @@
 // Domain-based service exports
 
 // Calendar domain
-export { AvailabilityService, BookingService, MeetingTypeService } from "./calendar";
+export {
+	AvailabilityService,
+	BookingService,
+	CalendarIntegrationService,
+	MeetingTypeService,
+} from "./calendar";
 
 export type {
 	AvailabilitySlot,
 	BookingQuestion,
+	CalendarIntegrationData,
 	CreateAvailabilityTemplateData,
 	CreateBookingData,
 	CreateMeetingTypeData,

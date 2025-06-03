@@ -1,7 +1,5 @@
-import { db } from "$lib/server/db";
-import { companies } from "$lib/server/schema";
+import { CompanyService } from "$lib/server/services";
 import { redirect } from "@sveltejs/kit";
-import { eq } from "drizzle-orm";
 import type { LayoutServerLoad } from "./$types";
 
 export const load: LayoutServerLoad = async ({ parent }) => {
@@ -18,14 +16,11 @@ export const load: LayoutServerLoad = async ({ parent }) => {
 		let currentCompanySlug = null;
 		if (parentData.selectedCompany?.id) {
 			try {
-				const companySlug = await db
-					.select({ slug: companies.slug })
-					.from(companies)
-					.where(eq(companies.id, parentData.selectedCompany.id))
-					.limit(1);
+				const companyService = new CompanyService();
+				const company = await companyService.getCompanyById(parentData.selectedCompany.id);
 
-				if (companySlug.length > 0) {
-					currentCompanySlug = companySlug[0].slug;
+				if (company) {
+					currentCompanySlug = company.slug;
 				}
 			} catch (error) {
 				console.warn("Failed to load company slug:", error);

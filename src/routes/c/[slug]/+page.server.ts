@@ -1,7 +1,6 @@
-import { trackView } from "$lib/server/analytics";
 import { db } from "$lib/server/db";
 import { meetingTypes } from "$lib/server/schema/calendar.schema";
-import { companies } from "$lib/server/schema/companies.schema";
+import { AnalyticsService, CompanyService } from "$lib/server/services";
 import { error } from "@sveltejs/kit";
 import { and, eq } from "drizzle-orm";
 
@@ -9,18 +8,14 @@ export async function load({ params, request, getClientAddress }) {
 	const { slug } = params;
 
 	try {
-		// Get company by slug
-		const company = await db
-			.select()
-			.from(companies)
-			.where(and(eq(companies.slug, slug), eq(companies.isActive, true)))
-			.limit(1);
+		const companyService = new CompanyService();
 
-		if (!company.length) {
+		// Get company by slug
+		const companyData = await companyService.getCompanyBySlug(slug);
+
+		if (!companyData || !companyData.isActive) {
 			throw error(404, "Company not found");
 		}
-
-		const companyData = company[0];
 
 		// Track the page view
 		const referrer = request.headers.get("referer") || "";
@@ -29,9 +24,12 @@ export async function load({ params, request, getClientAddress }) {
 		const path = `/c/${slug}`;
 
 		// Track view asynchronously (don't block page load)
-		trackView(companyData.id, path, referrer, userAgent, ipAddress).catch((err) => {
-			console.error("Failed to track view:", err);
-		});
+		const analyticsService = new AnalyticsService();
+		analyticsService
+			.trackView(companyData.id, path, referrer, userAgent, ipAddress)
+			.catch((err) => {
+				console.error("Failed to track view:", err);
+			});
 
 		// Get active meeting types for this company
 		const companyMeetingTypes = await db

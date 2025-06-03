@@ -1,6 +1,10 @@
 import { auth } from "$lib/server/auth";
-import { CalendarManager } from "$lib/server/calendar";
-import { SchedulingManager } from "$lib/server/scheduling";
+import {
+	AvailabilityService,
+	BookingService,
+	CalendarIntegrationService,
+	MeetingTypeService,
+} from "$lib/server/services";
 import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -14,25 +18,31 @@ export const load: PageServerLoad = async ({ parent }) => {
 			calendarIntegration: null,
 			meetingTypes: [],
 			availabilityTemplates: [],
+			upcomingBookings: 0,
 		};
 	}
 
 	try {
-		const calendarManager = new CalendarManager();
-		const schedulingManager = new SchedulingManager();
+		const calendarIntegrationService = new CalendarIntegrationService();
+		const meetingTypeService = new MeetingTypeService();
+		const availabilityService = new AvailabilityService();
+		const bookingService = new BookingService();
 
-		// Load calendar status (user-based) and company data
-		const [calendarStatus, companyMeetingTypes, companyAvailabilityTemplates] = await Promise.all([
-			calendarManager.getCalendarStatusByCompany(currentCompany.id),
-			schedulingManager.getCompanyMeetingTypes(currentCompany.id),
-			schedulingManager.getAvailabilityTemplates(currentCompany.id),
-		]);
+		// Load calendar status, company data, and booking statistics
+		const [calendarStatus, companyMeetingTypes, companyAvailabilityTemplates, upcomingBookings] =
+			await Promise.all([
+				calendarIntegrationService.getCalendarStatus(currentCompany.id),
+				meetingTypeService.getByCompany(currentCompany.id),
+				availabilityService.getTemplates(currentCompany.id),
+				bookingService.getUpcomingByCompany(currentCompany.id, user.id),
+			]);
 
 		return {
 			isCalendarConnected: calendarStatus.isConnected,
 			calendarIntegration: calendarStatus.integration,
 			meetingTypes: companyMeetingTypes,
 			availabilityTemplates: companyAvailabilityTemplates,
+			upcomingBookings: upcomingBookings.length,
 		};
 	} catch (error) {
 		console.error("Error loading calendar data:", error);
@@ -41,6 +51,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 			calendarIntegration: null,
 			meetingTypes: [],
 			availabilityTemplates: [],
+			upcomingBookings: 0,
 		};
 	}
 };
@@ -60,8 +71,8 @@ export const actions: Actions = {
 		}
 
 		try {
-			const calendarManager = new CalendarManager();
-			await calendarManager.disconnectCalendarByCompany(selectedCompanyId);
+			const calendarIntegrationService = new CalendarIntegrationService();
+			await calendarIntegrationService.disconnectCalendar(selectedCompanyId);
 
 			return { success: true, message: "Calendar disconnected successfully!" };
 		} catch (error) {
@@ -91,8 +102,8 @@ export const actions: Actions = {
 		}
 
 		try {
-			const calendarManager = new CalendarManager();
-			await calendarManager.selectCalendarByCompany(selectedCompanyId, calendarId);
+			const calendarIntegrationService = new CalendarIntegrationService();
+			await calendarIntegrationService.selectCalendar(selectedCompanyId, calendarId);
 
 			return { success: true, message: "Calendar selected successfully!" };
 		} catch (error) {
@@ -129,8 +140,8 @@ export const actions: Actions = {
 		}
 
 		try {
-			const schedulingManager = new SchedulingManager();
-			const meetingType = await schedulingManager.createMeetingType({
+			const meetingTypeService = new MeetingTypeService();
+			const meetingType = await meetingTypeService.create({
 				companyId: selectedCompanyId,
 				userId: session.user.id,
 				name,
@@ -179,8 +190,8 @@ export const actions: Actions = {
 		}
 
 		try {
-			const schedulingManager = new SchedulingManager();
-			const meetingType = await schedulingManager.updateMeetingType(id, session.user.id, {
+			const meetingTypeService = new MeetingTypeService();
+			const meetingType = await meetingTypeService.update(id, session.user.id, {
 				name,
 				description,
 				duration,
@@ -219,8 +230,8 @@ export const actions: Actions = {
 		}
 
 		try {
-			const schedulingManager = new SchedulingManager();
-			await schedulingManager.deleteMeetingType(id, session.user.id);
+			const meetingTypeService = new MeetingTypeService();
+			await meetingTypeService.delete(id, session.user.id);
 
 			return { success: true, message: "Meeting type deleted successfully!" };
 		} catch (error) {
@@ -250,8 +261,12 @@ export const actions: Actions = {
 		}
 
 		try {
-			const schedulingManager = new SchedulingManager();
-			await schedulingManager.setAvailability(selectedCompanyId, session.user.id, availabilityData);
+			const availabilityService = new AvailabilityService();
+			await availabilityService.setCompanyAvailability(
+				selectedCompanyId,
+				session.user.id,
+				availabilityData
+			);
 
 			return { success: true, message: "Availability updated successfully!" };
 		} catch (error) {

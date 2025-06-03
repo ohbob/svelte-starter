@@ -1,0 +1,1 @@
+ALTER TABLE "meeting_types" ADD COLUMN "selected_calendar_id" text;

@@ -14,6 +14,7 @@
 	let calendarIntegration = $state(null);
 	let meetingTypes = $state([]);
 	let availabilityTemplates = $state([]);
+	let upcomingBookings = $state(0);
 
 	// Simple data sync
 	$effect(() => {
@@ -21,6 +22,7 @@
 		calendarIntegration = data.calendarIntegration || null;
 		meetingTypes = data.meetingTypes || [];
 		availabilityTemplates = data.availabilityTemplates || [];
+		upcomingBookings = data.upcomingBookings || 0;
 		loading = false;
 	});
 
@@ -151,7 +153,7 @@
 			<div class="flex items-center justify-between">
 				<div>
 					<h3 class="text-lg font-medium text-gray-900">Bookings</h3>
-					<p class="text-3xl font-bold text-purple-600">0</p>
+					<p class="text-3xl font-bold text-purple-600">{upcomingBookings}</p>
 					<p class="text-sm text-gray-500">Upcoming bookings</p>
 				</div>
 				<div class="rounded-full bg-purple-100 p-3">

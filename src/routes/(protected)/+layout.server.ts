@@ -1,7 +1,5 @@
 import { auth } from "$lib/server/auth";
-import { db } from "$lib/server/db";
-import { companies } from "$lib/server/schema";
-import { eq } from "drizzle-orm";
+import { CompanyService } from "$lib/server/services";
 import type { LayoutServerLoad } from "./$types";
 
 export const load: LayoutServerLoad = async ({ request, cookies }) => {
@@ -15,14 +13,14 @@ export const load: LayoutServerLoad = async ({ request, cookies }) => {
 		};
 	}
 
+	const companyService = new CompanyService();
+
 	// Get user's companies - ONLY id and name for selector
-	const userCompanies = await db
-		.select({
-			id: companies.id,
-			name: companies.name,
-		})
-		.from(companies)
-		.where(eq(companies.userId, session.user.id));
+	const allUserCompanies = await companyService.getUserCompanies(session.user.id);
+	const userCompanies = allUserCompanies.map((company) => ({
+		id: company.id,
+		name: company.name,
+	}));
 
 	// Get selected company from cookie
 	const selectedCompanyId = cookies.get("selectedCompanyId");

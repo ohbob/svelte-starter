@@ -1,48 +1,34 @@
 import { auth } from "$lib/server/auth";
-import { CalendarManager } from "$lib/server/calendar";
 import { AvailabilityService } from "$lib/server/services";
 import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ parent }) => {
-	// Get session and company data from parent layouts
 	const { user, currentCompany } = await parent();
 
 	if (!user || !currentCompany?.id) {
 		return {
-			isCalendarConnected: false,
-			calendarIntegration: null,
-			availabilityTemplates: [],
+			templates: [],
 		};
 	}
 
 	try {
-		const calendarManager = new CalendarManager();
 		const availabilityService = new AvailabilityService();
-
-		// Load calendar status (user-based) and availability templates (company-based)
-		const [calendarStatus, companyAvailabilityTemplates] = await Promise.all([
-			calendarManager.getCalendarStatusByCompany(currentCompany.id),
-			availabilityService.getTemplates(currentCompany.id),
-		]);
+		const templates = await availabilityService.getTemplates(currentCompany.id);
 
 		return {
-			isCalendarConnected: calendarStatus.isConnected,
-			calendarIntegration: calendarStatus.integration,
-			availabilityTemplates: companyAvailabilityTemplates,
+			templates,
 		};
 	} catch (error) {
 		console.error("Error loading availability templates:", error);
 		return {
-			isCalendarConnected: false,
-			calendarIntegration: null,
-			availabilityTemplates: [],
+			templates: [],
 		};
 	}
 };
 
 export const actions: Actions = {
-	createTemplate: async ({ request, cookies }) => {
+	create: async ({ request, cookies }) => {
 		const session = await auth.api.getSession({ headers: request.headers });
 
 		if (!session) {
@@ -65,12 +51,8 @@ export const actions: Actions = {
 			return fail(400, { error: "Template name is required" });
 		}
 
-		if (!slotsData) {
-			return fail(400, { error: "At least one time slot is required" });
-		}
-
 		try {
-			const slots = JSON.parse(slotsData);
+			const slots = slotsData ? JSON.parse(slotsData) : [];
 			const availabilityService = new AvailabilityService();
 
 			await availabilityService.createTemplate({
@@ -88,7 +70,7 @@ export const actions: Actions = {
 		}
 	},
 
-	updateTemplate: async ({ request, cookies }) => {
+	update: async ({ request, cookies }) => {
 		const session = await auth.api.getSession({ headers: request.headers });
 
 		if (!session) {
@@ -102,25 +84,21 @@ export const actions: Actions = {
 		}
 
 		const formData = await request.formData();
-		const templateId = formData.get("templateId") as string;
+		const id = formData.get("id") as string;
 		const name = formData.get("name") as string;
 		const description = formData.get("description") as string;
 		const isDefault = formData.get("isDefault") === "on";
 		const slotsData = formData.get("slots") as string;
 
-		if (!templateId || !name) {
+		if (!id || !name) {
 			return fail(400, { error: "Template ID and name are required" });
 		}
 
-		if (!slotsData) {
-			return fail(400, { error: "At least one time slot is required" });
-		}
-
 		try {
-			const slots = JSON.parse(slotsData);
+			const slots = slotsData ? JSON.parse(slotsData) : [];
 			const availabilityService = new AvailabilityService();
 
-			await availabilityService.updateTemplate(templateId, selectedCompanyId, {
+			await availabilityService.updateTemplate(id, selectedCompanyId, {
 				name,
 				description,
 				isDefault,
@@ -134,7 +112,7 @@ export const actions: Actions = {
 		}
 	},
 
-	deleteTemplate: async ({ request, cookies }) => {
+	delete: async ({ request, cookies }) => {
 		const session = await auth.api.getSession({ headers: request.headers });
 
 		if (!session) {
@@ -148,17 +126,23 @@ export const actions: Actions = {
 		}
 
 		const formData = await request.formData();
-		const templateId = formData.get("templateId") as string;
+		const id = formData.get("id") as string;
 
-		if (!templateId) {
+		if (!id) {
 			return fail(400, { error: "Template ID is required" });
 		}
 
 		try {
 			const availabilityService = new AvailabilityService();
-			await availabilityService.deleteTemplate(templateId, selectedCompanyId);
+			const result = await availabilityService.deleteTemplate(
+				id,
+				selectedCompanyId,
+				session.user.id
+			);
 
-			return { success: true, message: "Availability template deleted successfully!" };
+			// If result is null, deletion was prevented (template is in use)
+			// The notification has already been sent
+			return { success: true };
 		} catch (error) {
 			console.error("Error deleting availability template:", error);
 			return fail(500, { error: "Failed to delete availability template" });

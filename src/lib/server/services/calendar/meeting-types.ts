@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
-import { notification } from "../../notifications";
-import { companies, meetingTypes } from "../../schema";
+import { companies, meetingTypeAvailabilityTemplates, meetingTypes } from "../../schema";
+import { NotificationService } from "../notification";
 
 export interface CreateMeetingTypeData {
 	companyId: string;
@@ -15,6 +15,9 @@ export interface CreateMeetingTypeData {
 	bufferTimeBefore?: number;
 	bufferTimeAfter?: number;
 	maxBookingsPerDay?: number;
+	availabilityTemplateId?: string;
+	availabilityTemplateIds?: string[];
+	selectedCalendarId?: string;
 }
 
 export interface UpdateMeetingTypeData {
@@ -27,6 +30,9 @@ export interface UpdateMeetingTypeData {
 	bufferTimeBefore?: number;
 	bufferTimeAfter?: number;
 	maxBookingsPerDay?: number;
+	availabilityTemplateId?: string;
+	availabilityTemplateIds?: string[];
+	selectedCalendarId?: string;
 }
 
 export class MeetingTypeService {
@@ -36,27 +42,45 @@ export class MeetingTypeService {
 
 		const slug = await this.generateUniqueSlug(data.name, data.companyId);
 
-		const meetingType = await db
-			.insert(meetingTypes)
-			.values({
-				companyId: data.companyId,
-				name: data.name,
-				description: data.description,
-				duration: data.duration,
-				slug,
-				price: data.price || 0,
-				color: data.color || "#3b82f6",
-				requiresConfirmation: data.requiresConfirmation || false,
-				bufferTimeBefore: data.bufferTimeBefore || 0,
-				bufferTimeAfter: data.bufferTimeAfter || 0,
-				maxBookingsPerDay: data.maxBookingsPerDay,
-			})
-			.returning();
+		const insertData: any = {
+			companyId: data.companyId,
+			name: data.name,
+			description: data.description,
+			duration: data.duration,
+			slug,
+			price: data.price || 0,
+			color: data.color || "#3b82f6",
+			requiresConfirmation: data.requiresConfirmation || false,
+			bufferTimeBefore: data.bufferTimeBefore || 0,
+			bufferTimeAfter: data.bufferTimeAfter || 0,
+			maxBookingsPerDay: data.maxBookingsPerDay,
+		};
 
-		await notification.success(
+		// Add selectedCalendarId if provided
+		if (data.selectedCalendarId) {
+			insertData.selectedCalendarId = data.selectedCalendarId;
+		}
+
+		const meetingType = await db.insert(meetingTypes).values(insertData).returning();
+
+		// Insert into junction table for many-to-many relationship
+		const templateIds =
+			data.availabilityTemplateIds ||
+			(data.availabilityTemplateId ? [data.availabilityTemplateId] : []);
+		if (templateIds.length > 0) {
+			const junctionData = templateIds.map((templateId) => ({
+				meetingTypeId: meetingType[0].id,
+				availabilityTemplateId: templateId,
+			}));
+
+			await db.insert(meetingTypeAvailabilityTemplates).values(junctionData);
+		}
+
+		const notificationService = new NotificationService();
+		await notificationService.success(
 			"Meeting Type Created",
 			`"${data.name}" meeting type has been created successfully for ${company.name}.`,
-			{ userId: data.userId }
+			data.userId
 		);
 
 		return meetingType[0];
@@ -65,7 +89,10 @@ export class MeetingTypeService {
 	async update(meetingTypeId: string, userId: string, data: UpdateMeetingTypeData) {
 		const meetingType = await this.verifyMeetingTypeOwnership(meetingTypeId, userId);
 
-		const updateData: any = { ...data, updatedAt: new Date() };
+		let updateData: any = { ...data, updatedAt: new Date() };
+		// Remove the array fields since they're handled separately
+		delete updateData.availabilityTemplateIds;
+		delete updateData.availabilityTemplateId;
 
 		if (data.name) {
 			updateData.slug = await this.generateUniqueSlug(
@@ -85,10 +112,31 @@ export class MeetingTypeService {
 			throw new Error("Meeting type not found or unauthorized");
 		}
 
-		await notification.info(
+		// Update many-to-many relationship
+		const templateIds =
+			data.availabilityTemplateIds ||
+			(data.availabilityTemplateId ? [data.availabilityTemplateId] : []);
+
+		// Delete existing relationships
+		await db
+			.delete(meetingTypeAvailabilityTemplates)
+			.where(eq(meetingTypeAvailabilityTemplates.meetingTypeId, meetingTypeId));
+
+		// Insert new relationships
+		if (templateIds.length > 0) {
+			const junctionData = templateIds.map((templateId) => ({
+				meetingTypeId: meetingTypeId,
+				availabilityTemplateId: templateId,
+			}));
+
+			await db.insert(meetingTypeAvailabilityTemplates).values(junctionData);
+		}
+
+		const notificationService = new NotificationService();
+		await notificationService.info(
 			"Meeting Type Updated",
 			"Your meeting type has been updated successfully.",
-			{ userId }
+			userId
 		);
 
 		return updated[0];
@@ -107,10 +155,11 @@ export class MeetingTypeService {
 			throw new Error("Meeting type not found or unauthorized");
 		}
 
-		await notification.info(
+		const notificationService = new NotificationService();
+		await notificationService.info(
 			"Meeting Type Deleted",
 			`"${deleted[0].name}" meeting type has been deleted.`,
-			{ userId }
+			userId
 		);
 
 		return deleted[0];
@@ -120,6 +169,13 @@ export class MeetingTypeService {
 		return await db.query.meetingTypes.findMany({
 			where: and(eq(meetingTypes.companyId, companyId), eq(meetingTypes.isActive, true)),
 			orderBy: [asc(meetingTypes.createdAt)],
+			with: {
+				availabilityTemplates: {
+					with: {
+						availabilityTemplate: true,
+					},
+				},
+			},
 		});
 	}
 
@@ -141,6 +197,33 @@ export class MeetingTypeService {
 				company: true,
 			},
 		});
+	}
+
+	async getById(meetingTypeId: string) {
+		const meetingType = await db.query.meetingTypes.findFirst({
+			where: and(eq(meetingTypes.id, meetingTypeId), eq(meetingTypes.isActive, true)),
+			with: {
+				availabilityTemplates: {
+					with: {
+						availabilityTemplate: true,
+					},
+				},
+			},
+		});
+
+		if (!meetingType) {
+			throw new Error("Meeting type not found");
+		}
+
+		// Transform the data to match the expected format
+		const availabilityTemplatesList = meetingType.availabilityTemplates.map(
+			(junction) => junction.availabilityTemplate
+		);
+
+		return {
+			...meetingType,
+			availabilityTemplates: availabilityTemplatesList,
+		};
 	}
 
 	async getPublic(companyId: string, slug: string) {

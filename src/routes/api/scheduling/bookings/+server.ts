@@ -1,8 +1,6 @@
-import { SchedulingManager } from "$lib/server/scheduling";
+import { BookingService } from "$lib/server/services";
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
-
-const schedulingManager = new SchedulingManager();
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
@@ -17,7 +15,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		// Create the booking
-		const booking = await schedulingManager.createBooking({
+		const bookingService = new BookingService();
+		const booking = await bookingService.create({
 			meetingTypeId,
 			hostUserId,
 			guestName,

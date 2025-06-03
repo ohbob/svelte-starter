@@ -1,46 +1,35 @@
 import { auth } from "$lib/server/auth";
-import { CalendarManager } from "$lib/server/calendar";
-import { SchedulingManager } from "$lib/server/scheduling";
+import { MeetingTypeService } from "$lib/server/services";
 import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ parent }) => {
+	const startTime = Date.now();
+
 	// Get session and company data from parent layouts
 	const { user, currentCompany } = await parent();
 
 	if (!user || !currentCompany?.id) {
 		return {
-			isCalendarConnected: false,
-			calendarIntegration: null,
 			meetingTypes: [],
-			availability: [],
 		};
 	}
 
 	try {
-		const calendarManager = new CalendarManager();
-		const schedulingManager = new SchedulingManager();
+		const meetingTypeService = new MeetingTypeService();
 
-		// Load calendar status and meeting types
-		const [calendarStatus, companyMeetingTypes, companyAvailability] = await Promise.all([
-			calendarManager.getCalendarStatusByCompany(currentCompany.id),
-			schedulingManager.getCompanyMeetingTypes(currentCompany.id),
-			schedulingManager.getAvailability(currentCompany.id),
-		]);
+		// Only fetch meeting types - that's all this page needs!
+		const companyMeetingTypes = await meetingTypeService.getByCompany(currentCompany.id);
+
+		console.log(`Meetings page load took: ${Date.now() - startTime}ms`);
 
 		return {
-			isCalendarConnected: calendarStatus.isConnected,
-			calendarIntegration: calendarStatus.integration,
 			meetingTypes: companyMeetingTypes,
-			availability: companyAvailability,
 		};
 	} catch (error) {
 		console.error("Error loading meeting types:", error);
 		return {
-			isCalendarConnected: false,
-			calendarIntegration: null,
 			meetingTypes: [],
-			availability: [],
 		};
 	}
 };
@@ -68,14 +57,24 @@ export const actions: Actions = {
 		const requiresConfirmation = formData.get("requiresConfirmation") === "on";
 		const bufferTimeBefore = parseInt(formData.get("bufferTimeBefore") as string) || 0;
 		const bufferTimeAfter = parseInt(formData.get("bufferTimeAfter") as string) || 0;
+		const availabilityTemplateId = formData.get("availabilityTemplateId") as string;
+		const selectedCalendarId = formData.get("selectedCalendarId") as string;
 
 		if (!name || !duration) {
 			return fail(400, { error: "Name and duration are required" });
 		}
 
+		if (!availabilityTemplateId) {
+			return fail(400, { error: "Please select an availability template" });
+		}
+
+		if (!selectedCalendarId) {
+			return fail(400, { error: "Please select a calendar" });
+		}
+
 		try {
-			const schedulingManager = new SchedulingManager();
-			const meetingType = await schedulingManager.createMeetingType({
+			const meetingTypeService = new MeetingTypeService();
+			const meetingType = await meetingTypeService.create({
 				companyId: selectedCompanyId,
 				userId: session.user.id,
 				name,
@@ -86,6 +85,8 @@ export const actions: Actions = {
 				requiresConfirmation,
 				bufferTimeBefore,
 				bufferTimeAfter,
+				availabilityTemplateId,
+				selectedCalendarId,
 			});
 
 			return { success: true, message: "Meeting type created successfully!", meetingType };
@@ -118,14 +119,24 @@ export const actions: Actions = {
 		const requiresConfirmation = formData.get("requiresConfirmation") === "on";
 		const bufferTimeBefore = parseInt(formData.get("bufferTimeBefore") as string) || 0;
 		const bufferTimeAfter = parseInt(formData.get("bufferTimeAfter") as string) || 0;
+		const availabilityTemplateId = formData.get("availabilityTemplateId") as string;
+		const selectedCalendarId = formData.get("selectedCalendarId") as string;
 
 		if (!id || !name || !duration) {
 			return fail(400, { error: "ID, name and duration are required" });
 		}
 
+		if (!availabilityTemplateId) {
+			return fail(400, { error: "Please select an availability template" });
+		}
+
+		if (!selectedCalendarId) {
+			return fail(400, { error: "Please select a calendar" });
+		}
+
 		try {
-			const schedulingManager = new SchedulingManager();
-			const meetingType = await schedulingManager.updateMeetingType(id, session.user.id, {
+			const meetingTypeService = new MeetingTypeService();
+			const meetingType = await meetingTypeService.update(id, session.user.id, {
 				name,
 				description,
 				duration,
@@ -134,6 +145,8 @@ export const actions: Actions = {
 				requiresConfirmation,
 				bufferTimeBefore,
 				bufferTimeAfter,
+				availabilityTemplateId,
+				selectedCalendarId,
 			});
 
 			return { success: true, message: "Meeting type updated successfully!", meetingType };
@@ -164,8 +177,8 @@ export const actions: Actions = {
 		}
 
 		try {
-			const schedulingManager = new SchedulingManager();
-			await schedulingManager.deleteMeetingType(id, session.user.id);
+			const meetingTypeService = new MeetingTypeService();
+			await meetingTypeService.delete(id, session.user.id);
 
 			return { success: true, message: "Meeting type deleted successfully!" };
 		} catch (error) {

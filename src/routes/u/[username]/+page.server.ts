@@ -1,11 +1,11 @@
-import { trackPageView } from "$lib/server/analytics";
 import { db } from "$lib/server/db";
 import { companies, meetingTypes, user } from "$lib/server/schema";
+import { AnalyticsService } from "$lib/server/services";
 import { error } from "@sveltejs/kit";
 import { and, eq, inArray, or } from "drizzle-orm";
 import type { PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({ params, request }) => {
+export const load: PageServerLoad = async ({ params, request, getClientAddress }) => {
 	// Find user by custom URL first, then by username (name field), then by ID
 	const foundUser = await db
 		.select()
@@ -25,11 +25,24 @@ export const load: PageServerLoad = async ({ params, request }) => {
 
 	const userData = foundUser[0];
 
-	// Track page view
-	await trackPageView(userData.id, `/u/${params.username}`, request);
-
 	// Get user's companies directly
 	const userCompanies = await db.select().from(companies).where(eq(companies.userId, userData.id));
+
+	// Track page view for the first company (if any)
+	if (userCompanies.length > 0) {
+		const analyticsService = new AnalyticsService();
+		const referrer = request.headers.get("referer") || "";
+		const userAgent = request.headers.get("user-agent") || "";
+		const ipAddress = getClientAddress();
+		const path = `/u/${params.username}`;
+
+		// Track view asynchronously (don't block page load)
+		analyticsService
+			.trackView(userCompanies[0].id, path, referrer, userAgent, ipAddress)
+			.catch((err) => {
+				console.error("Failed to track view:", err);
+			});
+	}
 
 	// Get company IDs
 	const companyIds = userCompanies.map((company) => company.id);

@@ -1,45 +1,31 @@
-import { db } from "$lib/server/db";
-import { companies, dailyAnalytics, referrerAnalytics } from "$lib/server/schema";
+import { AnalyticsService } from "$lib/server/services";
 import { json } from "@sveltejs/kit";
-import { eq } from "drizzle-orm";
 import type { RequestHandler } from "./$types";
 
 export const GET: RequestHandler = async ({ url }) => {
-	const companyId = url.searchParams.get("companyId");
-
-	if (!companyId) {
-		return json({ error: "companyId parameter required" }, { status: 400 });
-	}
-
 	try {
-		// Get company info
-		const company = await db.select().from(companies).where(eq(companies.id, companyId)).limit(1);
+		const companyId = url.searchParams.get("companyId");
 
-		// Get daily analytics
-		const dailyData = await db
-			.select()
-			.from(dailyAnalytics)
-			.where(eq(dailyAnalytics.companyId, companyId))
-			.orderBy(dailyAnalytics.date);
+		if (!companyId) {
+			return json({ error: "companyId required" }, { status: 400 });
+		}
 
-		// Get referrer analytics
-		const referrerData = await db
-			.select()
-			.from(referrerAnalytics)
-			.where(eq(referrerAnalytics.companyId, companyId))
-			.orderBy(referrerAnalytics.date);
+		const analyticsService = new AnalyticsService();
+
+		// Calculate date range (last 30 days)
+		const endDate = new Date();
+		const startDate = new Date();
+		startDate.setDate(startDate.getDate() - 30);
+
+		const analytics = await analyticsService.getCompanyAnalytics(companyId, startDate, endDate);
 
 		return json({
-			company: company[0] || null,
-			dailyAnalytics: dailyData,
-			referrerAnalytics: referrerData,
-			totalRecords: {
-				daily: dailyData.length,
-				referrer: referrerData.length,
-			},
+			success: true,
+			companyId,
+			analytics,
 		});
 	} catch (error) {
 		console.error("Debug analytics error:", error);
-		return json({ error: "Failed to fetch analytics data" }, { status: 500 });
+		return json({ error: "Failed to get analytics data" }, { status: 500 });
 	}
 };

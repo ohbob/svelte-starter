@@ -1,5 +1,5 @@
 import { auth } from "$lib/server/auth";
-import { CalendarManager } from "$lib/server/calendar";
+import { CalendarIntegrationService } from "$lib/server/services";
 import { redirect } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 
@@ -17,9 +17,9 @@ export const GET: RequestHandler = async ({ request, cookies }) => {
 		throw redirect(302, "/app/calendar?error=no_company");
 	}
 
-	// Use userId for calendar integration (shared across companies)
-	const calendarManager = new CalendarManager();
-	const authUrl = calendarManager.generateAuthUrl(session.user.id);
+	// Use companyId for calendar integration (but internally converts to userId)
+	const calendarIntegrationService = new CalendarIntegrationService();
+	const authUrl = calendarIntegrationService.generateAuthUrl(selectedCompanyId);
 
 	throw redirect(302, authUrl);
 };

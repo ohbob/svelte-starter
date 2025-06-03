@@ -1,5 +1,5 @@
 import { auth } from "$lib/server/auth";
-import { NotificationsManager } from "$lib/server/notifications";
+import { NotificationService } from "$lib/server/services";
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 
@@ -17,13 +17,14 @@ export const GET: RequestHandler = async ({ url, request }) => {
 	const unreadOnly = url.searchParams.get("unreadOnly") === "true";
 
 	try {
-		const notifications = await NotificationsManager.getForUser(session.user.id, {
+		const notificationService = new NotificationService();
+		const notifications = await notificationService.getByUser(session.user.id, {
 			limit,
 			offset,
 			unreadOnly,
 		});
 
-		const unreadCount = await NotificationsManager.getUnreadCount(session.user.id);
+		const unreadCount = await notificationService.getUnreadCount(session.user.id);
 
 		return json({
 			notifications,
@@ -52,7 +53,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			return json({ error: "Title is required" }, { status: 400 });
 		}
 
-		const notification = await NotificationsManager.create({
+		const notificationService = new NotificationService();
+		const notification = await notificationService.create({
 			userId: session.user.id,
 			title,
 			message,
