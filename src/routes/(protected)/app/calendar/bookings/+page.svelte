@@ -294,7 +294,7 @@
 	<BookingSearchFilters bind:searchQuery bind:statusFilter />
 
 	<!-- Search Results Indicator -->
-	{#if searchQuery || statusFilter !== "all"}
+	<!-- {#if searchQuery || statusFilter !== "all"}
 		<div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
 			<div class="flex items-center">
 				<svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
@@ -325,7 +325,7 @@
 				</div>
 			</div>
 		</div>
-	{/if}
+	{/if} -->
 
 	<!-- Calendar Views -->
 	{#if currentView === "month" || currentView === "week"}

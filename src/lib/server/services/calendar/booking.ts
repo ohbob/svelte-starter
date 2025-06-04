@@ -384,7 +384,12 @@ export class BookingService {
 
 		// Add status filter
 		if (filters.status) {
-			whereConditions.push(eq(bookings.status, filters.status));
+			if (filters.status === "active") {
+				// Active status includes both pending and confirmed
+				whereConditions.push(or(eq(bookings.status, "pending"), eq(bookings.status, "confirmed")));
+			} else {
+				whereConditions.push(eq(bookings.status, filters.status));
+			}
 		}
 
 		// Add search filter

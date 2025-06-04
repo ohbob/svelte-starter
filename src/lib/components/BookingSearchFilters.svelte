@@ -60,6 +60,7 @@
 			class="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
 		>
 			<option value="all">All Status</option>
+			<option value="active">Active (Pending + Confirmed)</option>
 			<option value="pending">Pending</option>
 			<option value="confirmed">Confirmed</option>
 			<option value="cancelled">Cancelled</option>
