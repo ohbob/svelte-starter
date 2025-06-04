@@ -49,7 +49,7 @@
 </script>
 
 {#if bookings.length > 0}
-	<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+	<div class="grid grid-cols-1 gap-4">
 		{#each bookings as booking}
 			<div class="rounded-lg border bg-white p-6 shadow-sm">
 				<!-- Top row with status tag and action buttons -->

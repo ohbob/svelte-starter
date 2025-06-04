@@ -7,12 +7,22 @@
 	import CalendarNavigation from "$lib/components/CalendarNavigation.svelte";
 	import BookingSearchFilters from "$lib/components/BookingSearchFilters.svelte";
 	import CalendarGrid from "$lib/components/CalendarGrid.svelte";
-	import { format, parseISO } from "date-fns";
+	import {
+		format,
+		parseISO,
+		startOfMonth,
+		endOfMonth,
+		startOfWeek,
+		endOfWeek,
+		addDays,
+	} from "date-fns";
 
 	let { data, form } = $props();
 
-	// View state
-	let currentView = $state("month");
+	// View state - default to day view on mobile
+	let currentView = $state(
+		typeof window !== "undefined" && window.innerWidth < 768 ? "day" : "month"
+	);
 	let currentDate = $state(new Date());
 	let selectedBooking = $state(null);
 	let showNoteModal = $state(false);
@@ -62,6 +72,58 @@
 
 	function goToToday() {
 		currentDate = new Date();
+		updateDateRange();
+	}
+
+	// Update URL with date range parameters to trigger data refetch
+	function updateDateRange() {
+		const url = new URL(window.location.href);
+
+		let startDate, endDate;
+
+		if (currentView === "month") {
+			startDate = startOfMonth(currentDate);
+			endDate = endOfMonth(currentDate);
+		} else if (currentView === "week") {
+			startDate = startOfWeek(currentDate, { weekStartsOn: 1 });
+			endDate = endOfWeek(currentDate, { weekStartsOn: 1 });
+		} else if (currentView === "day") {
+			startDate = currentDate;
+			endDate = addDays(currentDate, 1);
+		} else {
+			// For list view, don't filter by date
+			url.searchParams.delete("startDate");
+			url.searchParams.delete("endDate");
+			url.searchParams.set("view", currentView);
+			goto(url.toString());
+			return;
+		}
+
+		url.searchParams.set("startDate", format(startDate, "yyyy-MM-dd"));
+		url.searchParams.set("endDate", format(endDate, "yyyy-MM-dd"));
+		url.searchParams.set("view", currentView);
+		goto(url.toString());
+	}
+
+	// Update view change handlers to trigger data refetch
+	function handleMonthViewClick() {
+		currentView = "month";
+		updateDateRange();
+	}
+
+	function handleWeekViewClick() {
+		currentView = "week";
+		updateDateRange();
+	}
+
+	function handleDayViewClick() {
+		currentView = "day";
+		updateDateRange();
+	}
+
+	function handleListViewClick() {
+		currentView = "list";
+		updateDateRange();
 	}
 
 	// Modal functions
@@ -131,22 +193,6 @@
 		openAddBookingModal();
 	}
 
-	function handleMonthViewClick() {
-		currentView = "month";
-	}
-
-	function handleWeekViewClick() {
-		currentView = "week";
-	}
-
-	function handleDayViewClick() {
-		currentView = "day";
-	}
-
-	function handleListViewClick() {
-		currentView = "list";
-	}
-
 	function handlePreviousPageClick() {
 		changePage(data.currentPage - 1);
 	}
@@ -206,6 +252,21 @@
 			toast.success(form.message || "Action completed successfully!");
 		} else if (form?.error) {
 			toast.error(form.error);
+		}
+	});
+
+	// Responsive view switching - switch to day view on mobile
+	$effect(() => {
+		if (typeof window !== "undefined") {
+			const handleResize = () => {
+				if (window.innerWidth < 768 && (currentView === "month" || currentView === "week")) {
+					currentView = "day";
+					updateDateRange();
+				}
+			};
+
+			window.addEventListener("resize", handleResize);
+			return () => window.removeEventListener("resize", handleResize);
 		}
 	});
 </script>
@@ -297,7 +358,7 @@
 				<button
 					type="button"
 					onclick={handleMonthViewClick}
-					class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors {currentView ===
+					class="hidden rounded-md px-3 py-1.5 text-sm font-medium transition-colors sm:flex {currentView ===
 					'month'
 						? 'bg-blue-100 text-blue-700'
 						: 'text-gray-500 hover:text-gray-700'}"
@@ -315,7 +376,7 @@
 				<button
 					type="button"
 					onclick={handleWeekViewClick}
-					class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors {currentView ===
+					class="hidden rounded-md px-3 py-1.5 text-sm font-medium transition-colors sm:flex {currentView ===
 					'week'
 						? 'bg-blue-100 text-blue-700'
 						: 'text-gray-500 hover:text-gray-700'}"
@@ -428,7 +489,12 @@
 	<!-- Calendar Views -->
 	{#if currentView === "month" || currentView === "week"}
 		<div class="rounded-lg border border-gray-200 bg-white">
-			<CalendarNavigation bind:currentDate {currentView} onGoToToday={goToToday} />
+			<CalendarNavigation
+				bind:currentDate
+				{currentView}
+				onGoToToday={goToToday}
+				onDateChange={updateDateRange}
+			/>
 			<CalendarGrid
 				{currentDate}
 				{currentView}
@@ -442,7 +508,12 @@
 		</div>
 	{:else if currentView === "day"}
 		<div class="rounded-lg border border-gray-200 bg-white">
-			<CalendarNavigation bind:currentDate {currentView} onGoToToday={goToToday} />
+			<CalendarNavigation
+				bind:currentDate
+				{currentView}
+				onGoToToday={goToToday}
+				onDateChange={updateDateRange}
+			/>
 			<div class="p-6">
 				<BookingList
 					bookings={currentDayBookings()}
@@ -563,7 +634,7 @@
 
 <!-- Note Modal -->
 {#if showNoteModal && selectedBooking}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+	<div class="fixed inset-0 z-[9999999] flex items-center justify-center bg-black bg-opacity-50">
 		<div class="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
 			<h3 class="mb-4 text-lg font-medium text-gray-900">
 				{selectedBooking.hostNotes ? "Edit Note" : "Add Note"}

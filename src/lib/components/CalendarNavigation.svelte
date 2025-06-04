@@ -1,7 +1,7 @@
 <script>
 	import { format, addMonths, subMonths, addDays } from "date-fns";
 
-	let { currentDate = $bindable(), currentView, onGoToToday } = $props();
+	let { currentDate = $bindable(), currentView, onGoToToday, onDateChange } = $props();
 
 	function prevPeriod() {
 		if (currentView === "month") {
@@ -10,6 +10,10 @@
 			currentDate = addDays(currentDate, -7);
 		} else if (currentView === "day") {
 			currentDate = addDays(currentDate, -1);
+		}
+		// Notify parent about date change
+		if (onDateChange) {
+			onDateChange(currentDate);
 		}
 	}
 
@@ -20,6 +24,10 @@
 			currentDate = addDays(currentDate, 7);
 		} else if (currentView === "day") {
 			currentDate = addDays(currentDate, 1);
+		}
+		// Notify parent about date change
+		if (onDateChange) {
+			onDateChange(currentDate);
 		}
 	}
 
@@ -51,6 +59,7 @@
 		<button
 			type="button"
 			onclick={prevPeriod}
+			aria-label="Previous {currentView}"
 			class="rounded-md p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
 		>
 			<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -60,6 +69,7 @@
 		<button
 			type="button"
 			onclick={nextPeriod}
+			aria-label="Next {currentView}"
 			class="rounded-md p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
 		>
 			<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

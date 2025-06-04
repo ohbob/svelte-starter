@@ -1,5 +1,6 @@
 <script>
 	import { enhance } from "$app/forms";
+	import BookingTooltip from "./BookingTooltip.svelte";
 	import {
 		format,
 		startOfMonth,
@@ -27,6 +28,8 @@
 	let expandedDays = $state(new Set());
 	let hoveredBooking = $state(null);
 	let tooltipPosition = $state({ x: 0, y: 0 });
+	let tooltipTimeout = $state(null);
+	let isTooltipHovered = $state(false);
 
 	// Calendar days calculation
 	let calendarDays = $derived(() => {
@@ -113,14 +116,17 @@
 
 	function handleRejectClick(booking) {
 		onShowRejectConfirmation(booking);
+		hideTooltip();
 	}
 
 	function handleCancelClick(booking) {
 		onShowCancelConfirmation(booking);
+		hideTooltip();
 	}
 
 	function handleNoteClick(booking) {
 		onOpenNoteModal(booking);
+		hideTooltip();
 	}
 
 	function handleToggleExpansion(dateKey) {
@@ -128,12 +134,47 @@
 	}
 
 	function handleBookingMouseEnter(booking, event) {
+		// Clear any existing timeout
+		if (tooltipTimeout) {
+			clearTimeout(tooltipTimeout);
+			tooltipTimeout = null;
+		}
+
 		hoveredBooking = booking;
 		tooltipPosition = { x: event.clientX, y: event.clientY };
+		isTooltipHovered = false; // Reset tooltip hover state
 	}
 
 	function handleBookingMouseLeave() {
+		// Only start hiding if we're not hovering over the tooltip
+		tooltipTimeout = setTimeout(() => {
+			if (!isTooltipHovered) {
+				hoveredBooking = null;
+			}
+		}, 100); // Short delay to allow moving to tooltip
+	}
+
+	function handleTooltipMouseEnter() {
+		// Clear timeout when hovering over tooltip
+		if (tooltipTimeout) {
+			clearTimeout(tooltipTimeout);
+			tooltipTimeout = null;
+		}
+		isTooltipHovered = true;
+	}
+
+	function handleTooltipMouseLeave() {
+		isTooltipHovered = false;
+		// Hide tooltip immediately when leaving it
 		hoveredBooking = null;
+	}
+
+	// Handler functions for tooltip actions
+	function hideTooltip() {
+		hoveredBooking = null;
+		tooltipTimeout = setTimeout(() => {
+			isTooltipHovered = false;
+		}, 100);
 	}
 </script>
 
@@ -343,6 +384,8 @@
 									class="group relative rounded px-1.5 py-1 text-xs {getStatusColor(
 										booking.status
 									)} hover:shadow-sm"
+									onmouseenter={(e) => handleBookingMouseEnter(booking, e)}
+									onmouseleave={handleBookingMouseLeave}
 								>
 									<div class="mb-1 flex items-center justify-between">
 										<div class="flex min-w-0 flex-1 items-center gap-1">
@@ -443,59 +486,6 @@
 											</button>
 										</div>
 									</div>
-
-									<!-- Comprehensive Tooltip -->
-									<div
-										class="absolute bottom-full left-0 z-50 mb-2 hidden w-80 rounded-lg border border-gray-200 bg-white p-4 shadow-xl group-hover:block"
-										style="z-index: 9999;"
-									>
-										<div class="space-y-3 text-sm">
-											<!-- Meeting Type & Duration -->
-											<div>
-												<div class="font-semibold text-gray-900">{booking.meetingType.name}</div>
-												<div class="text-gray-600">{formatDateTime(booking.startTime)}</div>
-												<div class="text-gray-600">{booking.meetingType.duration}m duration</div>
-											</div>
-
-											<!-- Guest Information -->
-											<div class="border-t border-gray-200 pt-3">
-												<div class="font-medium text-gray-900">Guest Details</div>
-												<div class="text-gray-700">{booking.guestName}</div>
-												<div class="text-gray-600">{booking.guestEmail}</div>
-												{#if booking.guestPhone}
-													<div class="text-gray-600">{booking.guestPhone}</div>
-												{/if}
-											</div>
-
-											<!-- Guest Notes -->
-											{#if booking.guestNotes}
-												<div class="border-t border-gray-200 pt-3">
-													<div class="font-medium text-gray-900">Guest Message</div>
-													<div class="text-xs text-gray-700">{booking.guestNotes}</div>
-												</div>
-											{/if}
-
-											<!-- Host Notes -->
-											{#if booking.hostNotes}
-												<div class="border-t border-gray-200 pt-3">
-													<div class="font-medium text-blue-700">Your Note</div>
-													<div class="text-xs text-blue-600">{booking.hostNotes}</div>
-												</div>
-											{/if}
-
-											<!-- Cancellation/Rejection Reason -->
-											{#if (booking.status === "cancelled" || booking.status === "rejected") && booking.cancellationReason}
-												<div class="border-t border-gray-200 pt-3">
-													<div class="font-medium text-red-700">
-														{booking.status === "cancelled" ? "Cancellation" : "Rejection"} Reason
-													</div>
-													<div class="break-words text-xs text-red-600">
-														{booking.cancellationReason}
-													</div>
-												</div>
-											{/if}
-										</div>
-									</div>
 								</div>
 							{/each}
 						</div>
@@ -508,53 +498,15 @@
 
 <!-- Global Tooltip -->
 {#if hoveredBooking}
-	<div
-		class="pointer-events-none fixed z-[99999] w-80 rounded-lg border border-gray-200 bg-white p-4 shadow-xl"
-		style="left: {tooltipPosition.x + 10}px; top: {tooltipPosition.y - 10}px;"
-	>
-		<div class="space-y-3 text-sm">
-			<!-- Meeting Type & Duration -->
-			<div>
-				<div class="font-semibold text-gray-900">{hoveredBooking.meetingType.name}</div>
-				<div class="text-gray-600">{formatDateTime(hoveredBooking.startTime)}</div>
-				<div class="text-gray-600">{hoveredBooking.meetingType.duration}m duration</div>
-			</div>
-
-			<!-- Guest Information -->
-			<div class="border-t border-gray-200 pt-3">
-				<div class="font-medium text-gray-900">Guest Details</div>
-				<div class="text-gray-700">{hoveredBooking.guestName}</div>
-				<div class="text-gray-600">{hoveredBooking.guestEmail}</div>
-				{#if hoveredBooking.guestPhone}
-					<div class="text-gray-600">{hoveredBooking.guestPhone}</div>
-				{/if}
-			</div>
-
-			<!-- Guest Notes -->
-			{#if hoveredBooking.guestNotes}
-				<div class="border-t border-gray-200 pt-3">
-					<div class="font-medium text-gray-900">Guest Message</div>
-					<div class="text-xs text-gray-700">{hoveredBooking.guestNotes}</div>
-				</div>
-			{/if}
-
-			<!-- Host Notes -->
-			{#if hoveredBooking.hostNotes}
-				<div class="border-t border-gray-200 pt-3">
-					<div class="font-medium text-blue-700">Your Note</div>
-					<div class="text-xs text-blue-600">{hoveredBooking.hostNotes}</div>
-				</div>
-			{/if}
-
-			<!-- Cancellation/Rejection Reason -->
-			{#if (hoveredBooking.status === "cancelled" || hoveredBooking.status === "rejected") && hoveredBooking.cancellationReason}
-				<div class="border-t border-gray-200 pt-3">
-					<div class="font-medium text-red-700">
-						{hoveredBooking.status === "cancelled" ? "Cancellation" : "Rejection"} Reason
-					</div>
-					<div class="break-words text-xs text-red-600">{hoveredBooking.cancellationReason}</div>
-				</div>
-			{/if}
-		</div>
-	</div>
+	<BookingTooltip
+		booking={hoveredBooking}
+		position={tooltipPosition}
+		onClose={() => (hoveredBooking = null)}
+		{onOpenNoteModal}
+		{onShowRejectConfirmation}
+		{onShowCancelConfirmation}
+		{handleEnhance}
+		onTooltipMouseEnter={handleTooltipMouseEnter}
+		onTooltipMouseLeave={handleTooltipMouseLeave}
+	/>
 {/if}

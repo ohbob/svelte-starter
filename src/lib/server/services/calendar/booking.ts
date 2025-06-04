@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { addMinutes, format } from "date-fns";
-import { and, asc, count, desc, eq, gte, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
 import { db } from "../../db";
 import { bookingAnswers, bookingQuestions, bookings, companies, meetingTypes } from "../../schema";
 import { NotificationService } from "../notification";
@@ -27,6 +27,8 @@ export interface BookingQuestion {
 export interface BookingFilters {
 	search?: string;
 	status?: string;
+	startDate?: string;
+	endDate?: string;
 	page?: number;
 	limit?: number;
 }
@@ -327,9 +329,9 @@ export class BookingService {
 			return [];
 		}
 
-		// Get meeting types for this specific company
+		// Get meeting types for this specific company (ONLY ACTIVE ONES)
 		const companyMeetingTypes = await db.query.meetingTypes.findMany({
-			where: eq(meetingTypes.companyId, companyId),
+			where: and(eq(meetingTypes.companyId, companyId), eq(meetingTypes.isActive, true)),
 		});
 
 		const meetingTypeIds = companyMeetingTypes.map((mt) => mt.id);
@@ -368,9 +370,9 @@ export class BookingService {
 			return { bookings: [], total: 0 };
 		}
 
-		// Get meeting types for this specific company
+		// Get meeting types for this specific company (ONLY ACTIVE ONES)
 		const companyMeetingTypes = await db.query.meetingTypes.findMany({
-			where: eq(meetingTypes.companyId, companyId),
+			where: and(eq(meetingTypes.companyId, companyId), eq(meetingTypes.isActive, true)),
 		});
 
 		const meetingTypeIds = companyMeetingTypes.map((mt) => mt.id);
@@ -386,7 +388,13 @@ export class BookingService {
 		if (filters.status) {
 			if (filters.status === "active") {
 				// Active status includes both pending and confirmed
-				whereConditions.push(or(eq(bookings.status, "pending"), eq(bookings.status, "confirmed")));
+				const statusCondition = or(
+					eq(bookings.status, "pending"),
+					eq(bookings.status, "confirmed")
+				);
+				if (statusCondition) {
+					whereConditions.push(statusCondition);
+				}
 			} else {
 				whereConditions.push(eq(bookings.status, filters.status));
 			}
@@ -395,9 +403,21 @@ export class BookingService {
 		// Add search filter
 		if (filters.search) {
 			const searchTerm = `%${filters.search}%`;
-			whereConditions.push(
-				or(ilike(bookings.guestName, searchTerm), ilike(bookings.guestEmail, searchTerm))
+			const searchCondition = or(
+				ilike(bookings.guestName, searchTerm),
+				ilike(bookings.guestEmail, searchTerm)
 			);
+			if (searchCondition) {
+				whereConditions.push(searchCondition);
+			}
+		}
+
+		// Add date range filter
+		if (filters.startDate) {
+			whereConditions.push(gte(bookings.startTime, new Date(filters.startDate)));
+		}
+		if (filters.endDate) {
+			whereConditions.push(lte(bookings.startTime, new Date(filters.endDate)));
 		}
 
 		const whereClause = and(...whereConditions);
@@ -409,7 +429,7 @@ export class BookingService {
 
 		// Get paginated results
 		const page = filters.page || 1;
-		const limit = filters.limit || 10;
+		const limit = filters.limit || 200; // Increased to 200 to show more results per page
 		const offset = (page - 1) * limit;
 
 		const bookingsResult = await db.query.bookings.findMany({
@@ -437,6 +457,29 @@ export class BookingService {
 				},
 			},
 		});
+
+		// CRITICAL SECURITY CHECK: Verify all returned bookings belong to the correct company
+		const securityViolations = bookingsResult.filter((b) => b.meetingType.companyId !== companyId);
+		if (securityViolations.length > 0) {
+			console.error("🚨 SECURITY VIOLATION DETECTED! Bookings from other companies returned:", {
+				expectedCompanyId: companyId,
+				violations: securityViolations.map((b) => ({
+					bookingId: b.id,
+					guestName: b.guestName,
+					actualCompanyId: b.meetingType.companyId,
+					companyName: b.meetingType.company.name,
+					meetingTypeName: b.meetingType.name,
+				})),
+			});
+
+			// Filter out the security violations before returning
+			const filteredBookings = bookingsResult.filter((b) => b.meetingType.companyId === companyId);
+
+			return {
+				bookings: filteredBookings,
+				total: filteredBookings.length, // Recalculate total after filtering
+			};
+		}
 
 		return {
 			bookings: bookingsResult,

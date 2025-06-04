@@ -1,6 +1,6 @@
 import { auth } from "$lib/server/auth";
 import { db } from "$lib/server/db";
-import { meetingTypes } from "$lib/server/schema/calendar.schema";
+import { meetingTypes } from "$lib/server/schema";
 import { BookingService, CalendarIntegrationService } from "$lib/server/services";
 import { fail } from "@sveltejs/kit";
 import { and, eq } from "drizzle-orm";
@@ -10,15 +10,11 @@ export const load: PageServerLoad = async ({ parent, url, cookies }) => {
 	// Get session and company data from parent layouts
 	const { user, currentCompany } = await parent();
 
-	console.log("[BOOKINGS DEBUG] User:", user?.id);
-	console.log("[BOOKINGS DEBUG] Current company:", currentCompany);
-
 	// Also get the selected company from cookies as backup
 	const selectedCompanyId = cookies.get("selectedCompanyId");
 	const companyId = currentCompany?.id || selectedCompanyId;
 
 	if (!user || !companyId) {
-		console.log("[BOOKINGS DEBUG] No user or company, returning empty data");
 		return {
 			isCalendarConnected: false,
 			calendarIntegration: null,
@@ -36,10 +32,12 @@ export const load: PageServerLoad = async ({ parent, url, cookies }) => {
 	const searchQuery = url.searchParams.get("q") || url.searchParams.get("search") || "";
 	const statusFilter = url.searchParams.get("status") || "all";
 	const page = parseInt(url.searchParams.get("page") || "1");
-	const limit = 10; // bookings per page
+	const limit = 200; // Increased to 200 bookings per page
 
-	console.log("[BOOKINGS DEBUG] Search params:", { searchQuery, statusFilter, page, limit });
-	console.log("[BOOKINGS DEBUG] Using company ID:", companyId);
+	// Get date range parameters for calendar filtering
+	const startDate = url.searchParams.get("startDate");
+	const endDate = url.searchParams.get("endDate");
+	const currentView = url.searchParams.get("view") || "month";
 
 	try {
 		const calendarService = new CalendarIntegrationService();
@@ -50,6 +48,8 @@ export const load: PageServerLoad = async ({ parent, url, cookies }) => {
 			bookingService.getByCompanyWithFilters(companyId, user.id, {
 				search: searchQuery,
 				status: statusFilter === "all" ? undefined : statusFilter,
+				startDate: startDate || undefined,
+				endDate: endDate || undefined,
 				page,
 				limit,
 			}),
@@ -58,20 +58,6 @@ export const load: PageServerLoad = async ({ parent, url, cookies }) => {
 				.from(meetingTypes)
 				.where(and(eq(meetingTypes.companyId, companyId), eq(meetingTypes.isActive, true))),
 		]);
-
-		console.log("[BOOKINGS DEBUG] Calendar status:", calendarStatus.isConnected);
-		console.log("[BOOKINGS DEBUG] Meeting types found:", companyMeetingTypes.length);
-		console.log("[BOOKINGS DEBUG] Bookings result:", {
-			total: bookingsResult.total,
-			bookingsCount: bookingsResult.bookings.length,
-			firstBooking: bookingsResult.bookings[0]
-				? {
-						id: bookingsResult.bookings[0].id,
-						guestName: bookingsResult.bookings[0].guestName,
-						status: bookingsResult.bookings[0].status,
-					}
-				: null,
-		});
 
 		return {
 			isCalendarConnected: calendarStatus.isConnected,
