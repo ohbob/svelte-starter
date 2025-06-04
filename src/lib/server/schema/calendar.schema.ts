@@ -109,6 +109,7 @@ export const bookings = pgTable("bookings", {
 	guestEmail: text("guest_email").notNull(),
 	guestPhone: text("guest_phone"),
 	guestNotes: text("guest_notes"),
+	hostNotes: text("host_notes"), // Host's private notes about the booking
 	startTime: timestamp("start_time").notNull(),
 	endTime: timestamp("end_time").notNull(),
 	status: text("status").notNull().default("confirmed"), // confirmed, cancelled, completed

@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from "svelte";
 	import { page } from "$app/stores";
 	import { toast } from "$lib/utils/toast";
 	import Button from "$lib/components/ui/button/button.svelte";
@@ -341,7 +340,7 @@
 										(!availability.hasSlots && day.isCurrentMonth)}
 
 									<button
-										onclick={() => !isDisabled && selectDate(day.date)}
+										onclick={() => selectDate(day.date)}
 										class="relative aspect-square rounded-lg p-2 text-sm transition-all duration-200
 											{day.isCurrentMonth
 											? availability.hasSlots

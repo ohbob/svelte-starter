@@ -186,7 +186,7 @@
 									type="checkbox"
 									id="day-{day.key}"
 									checked={slot?.enabled || false}
-									on:change={() => toggleDay(day.key)}
+									onchange={() => toggleDay(day.key)}
 									class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
 								/>
 								<label for="day-{day.key}" class="ml-2 text-sm font-medium text-gray-700">
@@ -199,14 +199,14 @@
 									<input
 										type="time"
 										value={slot.startTime}
-										on:change={(e) => updateTimeSlot(day.key, "startTime", e.target.value)}
+										onchange={(e) => updateTimeSlot(day.key, "startTime", e.target.value)}
 										class="rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
 									/>
 									<span class="text-sm text-gray-500">to</span>
 									<input
 										type="time"
 										value={slot.endTime}
-										on:change={(e) => updateTimeSlot(day.key, "endTime", e.target.value)}
+										onchange={(e) => updateTimeSlot(day.key, "endTime", e.target.value)}
 										class="rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
 									/>
 								</div>
@@ -228,7 +228,7 @@
 				{#if isEdit}
 					<button
 						type="button"
-						on:click={() => (showDeleteModal = true)}
+						onclick={() => (showDeleteModal = true)}
 						class="px-4 py-2 font-medium text-red-600 hover:text-red-800"
 					>
 						Delete Template
@@ -266,7 +266,7 @@
 			<div class="flex items-center justify-end gap-3">
 				<button
 					type="button"
-					on:click={() => (showDeleteModal = false)}
+					onclick={() => (showDeleteModal = false)}
 					class="px-4 py-2 text-gray-700 hover:text-gray-900"
 				>
 					Cancel

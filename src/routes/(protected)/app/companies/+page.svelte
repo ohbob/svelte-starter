@@ -140,12 +140,12 @@
 
 <!-- Add Company Modal -->
 {#if showAddModal}
-	<div class="fixed inset-0 z-50 bg-black bg-opacity-50" on:click={closeModal}>
+	<div class="fixed inset-0 z-50 bg-black bg-opacity-50" onclick={closeModal}>
 		<div class="flex min-h-full items-center justify-center p-4">
-			<div class="w-full max-w-2xl rounded-lg bg-white p-6" on:click={(e) => e.stopPropagation()}>
+			<div class="w-full max-w-2xl rounded-lg bg-white p-6" onclick={(e) => e.stopPropagation()}>
 				<div class="mb-4 flex items-center justify-between">
 					<h2 class="text-xl font-semibold text-gray-900">Add New Company</h2>
-					<button on:click={closeModal} class="text-gray-400 hover:text-gray-600">
+					<button onclick={closeModal} class="text-gray-400 hover:text-gray-600">
 						<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
 								stroke-linecap="round"
@@ -275,7 +275,7 @@
 					<div class="flex justify-end gap-3">
 						<button
 							type="button"
-							on:click={closeModal}
+							onclick={closeModal}
 							class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
 						>
 							Cancel

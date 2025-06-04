@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { addMinutes, format } from "date-fns";
-import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, or, sql } from "drizzle-orm";
 import { db } from "../../db";
 import { bookingAnswers, bookingQuestions, bookings, companies, meetingTypes } from "../../schema";
 import { NotificationService } from "../notification";
@@ -22,6 +22,18 @@ export interface BookingQuestion {
 	type: string;
 	options?: string;
 	isRequired: boolean;
+}
+
+export interface BookingFilters {
+	search?: string;
+	status?: string;
+	page?: number;
+	limit?: number;
+}
+
+export interface BookingsResult {
+	bookings: any[];
+	total: number;
 }
 
 export class BookingService {
@@ -340,6 +352,120 @@ export class BookingService {
 				},
 			},
 		});
+	}
+
+	async getByCompanyWithFilters(
+		companyId: string,
+		userId: string,
+		filters: BookingFilters
+	): Promise<BookingsResult> {
+		// Verify user owns this company
+		const company = await db.query.companies.findFirst({
+			where: and(eq(companies.id, companyId), eq(companies.userId, userId)),
+		});
+
+		if (!company) {
+			return { bookings: [], total: 0 };
+		}
+
+		// Get meeting types for this specific company
+		const companyMeetingTypes = await db.query.meetingTypes.findMany({
+			where: eq(meetingTypes.companyId, companyId),
+		});
+
+		const meetingTypeIds = companyMeetingTypes.map((mt) => mt.id);
+
+		if (meetingTypeIds.length === 0) {
+			return { bookings: [], total: 0 };
+		}
+
+		// Build where conditions
+		const whereConditions = [inArray(bookings.meetingTypeId, meetingTypeIds)];
+
+		// Add status filter
+		if (filters.status) {
+			whereConditions.push(eq(bookings.status, filters.status));
+		}
+
+		// Add search filter
+		if (filters.search) {
+			const searchTerm = `%${filters.search}%`;
+			whereConditions.push(
+				or(ilike(bookings.guestName, searchTerm), ilike(bookings.guestEmail, searchTerm))
+			);
+		}
+
+		const whereClause = and(...whereConditions);
+
+		// Get total count
+		const totalResult = await db.select({ count: count() }).from(bookings).where(whereClause);
+
+		const total = totalResult[0]?.count || 0;
+
+		// Get paginated results
+		const page = filters.page || 1;
+		const limit = filters.limit || 10;
+		const offset = (page - 1) * limit;
+
+		const bookingsResult = await db.query.bookings.findMany({
+			where: whereClause,
+			orderBy: [
+				// First, order by status priority (confirmed and pending first)
+				sql`CASE 
+					WHEN ${bookings.status} = 'confirmed' THEN 0 
+					WHEN ${bookings.status} = 'pending' THEN 1 
+					WHEN ${bookings.status} = 'completed' THEN 2
+					WHEN ${bookings.status} = 'cancelled' THEN 3
+					WHEN ${bookings.status} = 'rejected' THEN 4
+					ELSE 5 
+				END`,
+				// Then order by start time (most recent first)
+				desc(bookings.startTime),
+			],
+			limit,
+			offset,
+			with: {
+				meetingType: {
+					with: {
+						company: true,
+					},
+				},
+			},
+		});
+
+		return {
+			bookings: bookingsResult,
+			total,
+		};
+	}
+
+	async addHostNote(bookingId: string, userId: string, note: string) {
+		const booking = await db.query.bookings.findFirst({
+			where: eq(bookings.id, bookingId),
+			with: {
+				meetingType: {
+					with: {
+						company: true,
+					},
+				},
+			},
+		});
+
+		if (!booking || booking.meetingType.company.userId !== userId) {
+			throw new Error("Booking not found or unauthorized");
+		}
+
+		// Update booking with host note
+		const updated = await db
+			.update(bookings)
+			.set({
+				hostNotes: note,
+				updatedAt: new Date(),
+			})
+			.where(eq(bookings.id, bookingId))
+			.returning();
+
+		return updated[0];
 	}
 
 	// === BOOKING QUESTIONS ===

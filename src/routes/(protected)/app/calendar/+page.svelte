@@ -156,7 +156,7 @@
 				<div>
 					<h3 class="text-lg font-medium text-gray-900">Bookings</h3>
 					<p class="text-3xl font-bold text-purple-600">{upcomingBookings}</p>
-					<p class="text-sm text-gray-500">Upcoming bookings</p>
+					<p class="text-sm text-gray-500">Total bookings</p>
 				</div>
 				<div class="rounded-full bg-purple-100 p-3">
 					<svg

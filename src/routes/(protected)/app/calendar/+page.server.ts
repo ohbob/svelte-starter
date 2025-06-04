@@ -30,12 +30,12 @@ export const load: PageServerLoad = async ({ parent }) => {
 		const bookingService = new BookingService();
 
 		// Parallelize all independent async operations
-		const [calendarStatus, companyMeetingTypes, companyAvailabilityTemplates, upcomingBookings] =
+		const [calendarStatus, companyMeetingTypes, companyAvailabilityTemplates, totalBookings] =
 			await Promise.all([
 				calendarIntegrationService.getCalendarStatus(currentCompany.id),
 				meetingTypeService.getByCompany(currentCompany.id),
 				availabilityService.getTemplates(currentCompany.id),
-				bookingService.getUpcomingByCompany(currentCompany.id, user.id),
+				bookingService.getByCompany(currentCompany.id, user.id),
 			]);
 
 		// Get available calendars if connected (depends on calendar status)
@@ -56,7 +56,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 			availableCalendars,
 			meetingTypes: companyMeetingTypes,
 			availabilityTemplates: companyAvailabilityTemplates,
-			upcomingBookings: upcomingBookings.length,
+			upcomingBookings: totalBookings.length,
 		};
 	} catch (error) {
 		console.error("Error loading calendar data:", error);

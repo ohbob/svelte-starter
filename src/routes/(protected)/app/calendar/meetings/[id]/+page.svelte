@@ -275,7 +275,7 @@
 										name="availabilityTemplateIds"
 										value={template.id}
 										checked={selectedTemplateIds.has(template.id)}
-										on:change={() => toggleTemplate(template.id)}
+										onchange={() => toggleTemplate(template.id)}
 										class="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
 									/>
 									<div class="flex-1">
