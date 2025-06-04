@@ -4,6 +4,7 @@ import {
 	CalendarIntegrationService,
 	MeetingTypeService,
 } from "$lib/server/services";
+import { LocationService } from "$lib/server/services/calendar/location";
 import { error, fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -19,10 +20,11 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		const availabilityService = new AvailabilityService();
 		const calendarService = new CalendarIntegrationService();
 
-		const [meetingType, availabilityTemplates, calendarStatus] = await Promise.all([
+		const [meetingType, availabilityTemplates, calendarStatus, locations] = await Promise.all([
 			meetingTypeService.getById(params.id),
 			availabilityService.getTemplates(selectedCompany.id),
 			calendarService.getCalendarStatus(selectedCompany.id),
+			LocationService.getByCompany(selectedCompany.id),
 		]);
 
 		if (!meetingType) {
@@ -43,6 +45,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 			meetingType,
 			availabilityTemplates,
 			availableCalendars,
+			locations,
 			isCalendarConnected: calendarStatus.isConnected,
 		};
 	} catch (err) {
@@ -76,6 +79,7 @@ export const actions: Actions = {
 		const bufferTimeAfter = parseInt(formData.get("bufferTimeAfter") as string) || 0;
 		const availabilityTemplateIds = formData.getAll("availabilityTemplateIds") as string[];
 		const selectedCalendarId = formData.get("selectedCalendarId") as string;
+		const locationId = formData.get("locationId") as string;
 
 		if (!name || !duration) {
 			return fail(400, { error: "Name and duration are required" });
@@ -98,6 +102,7 @@ export const actions: Actions = {
 				bufferTimeAfter,
 				availabilityTemplateIds,
 				selectedCalendarId: selectedCalendarId || undefined,
+				locationId: locationId || undefined,
 			});
 		} catch (error) {
 			console.error("Error updating meeting type:", error);

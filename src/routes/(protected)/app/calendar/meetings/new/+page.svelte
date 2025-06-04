@@ -21,6 +21,7 @@
 		bufferTimeBefore: 0,
 		bufferTimeAfter: 0,
 		selectedCalendarId: "",
+		locationId: "",
 	});
 
 	// Set default values when data loads
@@ -171,7 +172,12 @@
 		</div>
 	{:else}
 		<!-- Main Form -->
-		<form method="POST" action="?/create" use:enhance={handleSubmit} class="space-y-8">
+		<form
+			method="POST"
+			action="/app/calendar/meetings?/createMeetingType"
+			use:enhance={handleSubmit}
+			class="space-y-8"
+		>
 			<div class="grid gap-8 lg:grid-cols-2">
 				<!-- Left Column - Basic Info -->
 				<div class="space-y-6">
@@ -275,6 +281,32 @@
 										</label>
 									{/each}
 								</div>
+							</div>
+
+							<!-- Location -->
+							<div>
+								<label for="locationId" class="mb-1 block text-sm font-medium text-gray-700">
+									Location
+								</label>
+								<select
+									id="locationId"
+									name="locationId"
+									bind:value={formData.locationId}
+									class="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+								>
+									<option value="">No location assigned</option>
+									{#each data.locations as location}
+										<option value={location.id}>
+											{location.name} ({location.type === "in-person" ? "In-Person" : "Virtual"})
+										</option>
+									{/each}
+								</select>
+								<p class="mt-1 text-xs text-gray-500">
+									Choose a location for this meeting type. <a
+										href="/app/calendar/locations"
+										class="text-blue-600 hover:text-blue-800">Manage locations</a
+									>
+								</p>
 							</div>
 						</div>
 					</div>

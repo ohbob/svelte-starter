@@ -52,6 +52,7 @@ export class BookingService {
 			where: and(eq(meetingTypes.id, data.meetingTypeId), eq(meetingTypes.isActive, true)),
 			with: {
 				company: true,
+				location: true,
 			},
 		});
 
@@ -114,6 +115,8 @@ export class BookingService {
 					notes: data.guestNotes,
 					calendarId: meetingType.selectedCalendarId, // Required - no fallback
 					cancellationToken: booking[0].cancellationToken || undefined, // Include cancellation token
+					location: meetingType.location || undefined, // Include location information
+					bookingId: booking[0].id, // Include booking ID as reservation number
 				});
 
 				// Update booking with Google event ID
@@ -405,7 +408,8 @@ export class BookingService {
 			const searchTerm = `%${filters.search}%`;
 			const searchCondition = or(
 				ilike(bookings.guestName, searchTerm),
-				ilike(bookings.guestEmail, searchTerm)
+				ilike(bookings.guestEmail, searchTerm),
+				ilike(sql`${bookings.id}::text`, searchTerm) // Cast UUID to text for search
 			);
 			if (searchCondition) {
 				whereConditions.push(searchCondition);
@@ -567,6 +571,7 @@ export class BookingService {
 				meetingType: {
 					with: {
 						company: true,
+						location: true,
 					},
 				},
 			},
@@ -611,6 +616,8 @@ export class BookingService {
 				notes: booking.guestNotes || undefined,
 				calendarId: booking.meetingType.selectedCalendarId, // Required - no fallback
 				cancellationToken: booking.cancellationToken || undefined, // Include cancellation token
+				location: booking.meetingType.location || undefined, // Include location information
+				bookingId: booking.id, // Include booking ID as reservation number
 			});
 
 			// Update booking with Google event ID

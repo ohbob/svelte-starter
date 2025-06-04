@@ -5,6 +5,7 @@ export {
 	AvailabilityService,
 	BookingService,
 	CalendarIntegrationService,
+	LocationService,
 	MeetingTypeService,
 } from "./calendar";
 

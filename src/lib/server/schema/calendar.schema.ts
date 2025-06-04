@@ -2,6 +2,7 @@ import { relations } from "drizzle-orm";
 import { boolean, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth.schema";
 import { companies } from "./companies.schema";
+import { locations } from "./locations.schema";
 
 // Updated calendar integrations - now user-based instead of company-based
 export const calendarIntegrations = pgTable("calendar_integrations", {
@@ -54,6 +55,7 @@ export const meetingTypes = pgTable("meeting_types", {
 	companyId: text("company_id")
 		.notNull()
 		.references(() => companies.id, { onDelete: "cascade" }),
+	locationId: uuid("location_id").references(() => locations.id, { onDelete: "restrict" }), // Optional location for backward compatibility
 	name: text("name").notNull(), // "30 Minute Meeting"
 	slug: text("slug").notNull(), // "30min-meeting"
 	description: text("description"),
@@ -176,6 +178,10 @@ export const meetingTypesRelations = relations(meetingTypes, ({ one, many }) => 
 	company: one(companies, {
 		fields: [meetingTypes.companyId],
 		references: [companies.id],
+	}),
+	location: one(locations, {
+		fields: [meetingTypes.locationId],
+		references: [locations.id],
 	}),
 	bookings: many(bookings),
 	questions: many(bookingQuestions),

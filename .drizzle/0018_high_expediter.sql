@@ -1,0 +1,1 @@
+ALTER TABLE "meeting_types" ALTER COLUMN "location_id" DROP NOT NULL;

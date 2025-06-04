@@ -2,6 +2,7 @@
 export { AvailabilityService } from "./availability";
 export { BookingService } from "./booking";
 export { CalendarIntegrationService } from "./integration";
+export { LocationService } from "./location";
 export { MeetingTypeService } from "./meeting-types";
 
 // Type exports

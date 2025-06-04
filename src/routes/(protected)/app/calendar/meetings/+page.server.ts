@@ -59,6 +59,7 @@ export const actions: Actions = {
 		const bufferTimeAfter = parseInt(formData.get("bufferTimeAfter") as string) || 0;
 		const availabilityTemplateId = formData.get("availabilityTemplateId") as string;
 		const selectedCalendarId = formData.get("selectedCalendarId") as string;
+		const locationId = formData.get("locationId") as string;
 
 		if (!name || !duration) {
 			return fail(400, { error: "Name and duration are required" });
@@ -87,6 +88,7 @@ export const actions: Actions = {
 				bufferTimeAfter,
 				availabilityTemplateId,
 				selectedCalendarId,
+				locationId: locationId || undefined,
 			});
 
 			return { success: true, message: "Meeting type created successfully!", meetingType };

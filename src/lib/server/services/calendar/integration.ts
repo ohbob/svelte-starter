@@ -25,10 +25,13 @@ export class CalendarIntegrationService {
 	private readonly BUSY_TIMES_CACHE_TTL = 2 * 60 * 1000; // 2 minutes for busy times (more critical)
 
 	constructor() {
+		// Use PUBLIC_BASE_URL to construct the redirect URI dynamically
+		const redirectUri = `${PUBLIC_BASE_URL}/api/calendar/callback`;
+
 		this.oauth2Client = new google.auth.OAuth2(
 			env.GOOGLE_CLIENT_ID,
 			env.GOOGLE_CLIENT_SECRET,
-			env.GOOGLE_REDIRECT_URI
+			redirectUri
 		);
 
 		this.calendar = google.calendar({ version: "v3", auth: this.oauth2Client });
@@ -347,6 +350,8 @@ export class CalendarIntegrationService {
 		notes?: string;
 		calendarId?: string; // Optional specific calendar ID for this event
 		cancellationToken?: string; // Cancellation token for client cancellation
+		location?: any; // Location information from meeting type
+		bookingId?: string; // Booking ID for reservation number
 	}): Promise<string> {
 		const integration = await this.setupAuthForCompany(bookingData.companyId);
 
@@ -360,12 +365,141 @@ export class CalendarIntegrationService {
 
 		console.log(`Creating calendar event in calendar: ${targetCalendarId}`);
 
-		// Build the event description with cancellation link if token is provided
-		let description = `
-Meeting Type: ${bookingData.meetingTypeName}
+		// Build the event description
+		let description = `Meeting Type: ${bookingData.meetingTypeName}
 Duration: ${bookingData.duration} minutes
-Guest: ${bookingData.guestName} (${bookingData.guestEmail})
-${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}`;
+Guest: ${bookingData.guestName} (${bookingData.guestEmail})`;
+
+		// Add reservation number if booking ID is provided
+		if (bookingData.bookingId) {
+			description += `\nReservation #: ${bookingData.bookingId}`;
+		}
+
+		// Add notes if provided
+		if (bookingData.notes) {
+			description += `\n\nNotes:\n${bookingData.notes}`;
+		}
+
+		// Format location for Google Calendar
+		let calendarLocation = "";
+		let locationDescription = "";
+		let conferenceData = null;
+
+		console.log(
+			"🔍 [DEBUG] Location data received:",
+			JSON.stringify(bookingData.location, null, 2)
+		);
+
+		if (bookingData.location) {
+			if (bookingData.location.type === "in-person") {
+				// For in-person meetings, use the address as the location
+				const addressParts = [
+					bookingData.location.address,
+					bookingData.location.city,
+					bookingData.location.state,
+					bookingData.location.country,
+					bookingData.location.postalCode,
+				].filter(Boolean);
+
+				calendarLocation = addressParts.join(", ");
+				locationDescription = `📍 ${bookingData.location.name}`;
+
+				// For in-person locations, just add contact info to description (no conferenceData)
+				if (bookingData.location.phone) {
+					locationDescription += `\n📞 Phone: ${bookingData.location.phone}`;
+				}
+
+				if (bookingData.location.contactPerson) {
+					locationDescription += `\n👤 Contact: ${bookingData.location.contactPerson}`;
+				}
+				if (bookingData.location.instructions) {
+					locationDescription += `\n📋 Instructions: ${bookingData.location.instructions}`;
+				}
+
+				// No conferenceData for in-person locations - phone numbers are just contact info
+			} else if (bookingData.location.type === "virtual") {
+				console.log("🔍 [DEBUG] Processing virtual location");
+				console.log("🔍 [DEBUG] Platform:", bookingData.location.platform);
+				console.log("🔍 [DEBUG] Auto-generate link:", bookingData.location.autoGenerateLink);
+				console.log("🔍 [DEBUG] Custom meeting URL:", bookingData.location.customMeetingUrl);
+
+				// For virtual meetings, include meeting link and instructions
+				locationDescription = `💻 ${bookingData.location.name} (Virtual Meeting)`;
+				const entryPoints = [];
+
+				if (bookingData.location.customMeetingUrl) {
+					// Format URL as video entry point
+					entryPoints.push({
+						entryPointType: "video",
+						uri: bookingData.location.customMeetingUrl,
+						label: `Join ${bookingData.location.name}`,
+					});
+					locationDescription += `\n🔗 Join Meeting: ${bookingData.location.customMeetingUrl}`;
+					calendarLocation = bookingData.location.customMeetingUrl;
+				} else if (
+					bookingData.location.autoGenerateLink &&
+					bookingData.location.platform === "google-meet"
+				) {
+					console.log("🔍 [DEBUG] Setting up Google Meet auto-generation");
+					// Use Google Calendar's built-in Google Meet generation
+					conferenceData = {
+						createRequest: {
+							requestId: `meet-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+							conferenceSolutionKey: {
+								type: "hangoutsMeet",
+							},
+						},
+					};
+					console.log(
+						"🔍 [DEBUG] Conference data created:",
+						JSON.stringify(conferenceData, null, 2)
+					);
+					locationDescription += `\n🔗 Google Meet link will be generated automatically`;
+				} else if (bookingData.location.autoGenerateLink) {
+					locationDescription += `\n🔗 Meeting link will be generated automatically`;
+				}
+
+				if (bookingData.location.meetingInstructions) {
+					locationDescription += `\n📋 Instructions: ${bookingData.location.meetingInstructions}`;
+				}
+
+				// Add dial-in information if available (only for virtual meetings)
+				if (bookingData.location.dialInNumber) {
+					const dialInNumber = bookingData.location.dialInNumber.replace(/\s+/g, "");
+					entryPoints.push({
+						entryPointType: "phone",
+						uri: `tel:${dialInNumber}`,
+						label: `Dial-in: ${bookingData.location.dialInNumber}`,
+						...(bookingData.location.accessCode && { accessCode: bookingData.location.accessCode }),
+					});
+					locationDescription += `\n📞 Dial-in: ${bookingData.location.dialInNumber}`;
+				}
+				if (bookingData.location.accessCode) {
+					locationDescription += `\n🔑 Access Code: ${bookingData.location.accessCode}`;
+				}
+
+				// Add conference data for custom URLs and dial-in (but not for auto-generated Google Meet)
+				if (entryPoints.length > 0 && !conferenceData) {
+					conferenceData = {
+						conferenceSolution: {
+							key: { type: "addOn" },
+							name: bookingData.location.name,
+						},
+						entryPoints: entryPoints,
+						notes:
+							bookingData.location.meetingInstructions ||
+							`Virtual meeting via ${bookingData.location.name}`,
+					};
+				}
+			}
+
+			// Add location info to description
+			if (locationDescription) {
+				description += `\n\nLocation:\n${locationDescription}`;
+			}
+		}
+
+		console.log("🔍 [DEBUG] Final conference data:", JSON.stringify(conferenceData, null, 2));
 
 		// Add cancellation link if token is provided
 		if (bookingData.cancellationToken) {
@@ -376,6 +510,8 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}`;
 		const event = {
 			summary: `${bookingData.meetingTypeName} with ${bookingData.guestName}`,
 			description: description.trim(),
+			location: calendarLocation || undefined, // Google Calendar location field
+			...(conferenceData && { conferenceData }), // Add conference data if available
 			start: {
 				dateTime: bookingData.startTime.toISOString(),
 				timeZone: "UTC",
@@ -394,14 +530,48 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}`;
 			},
 		};
 
+		console.log(
+			"🔍 [DEBUG] Event object being sent to Google Calendar:",
+			JSON.stringify(event, null, 2)
+		);
+
 		const response = await this.calendar.events.insert({
 			calendarId: targetCalendarId,
 			requestBody: event,
 			sendUpdates: "all",
+			conferenceDataVersion: 1, // Required for conference data
 		});
+
+		console.log("🔍 [DEBUG] Google Calendar API response:", JSON.stringify(response.data, null, 2));
 
 		if (!response.data?.id) {
 			throw new Error("Failed to create calendar event");
+		}
+
+		// If we generated a Google Meet link, update the event description with the actual link
+		if (conferenceData?.createRequest && response.data.hangoutLink) {
+			console.log("🔍 [DEBUG] Google Meet link generated:", response.data.hangoutLink);
+
+			// Update the description to replace the placeholder with the actual link
+			const updatedDescription = description.replace(
+				"🔗 Google Meet link will be generated automatically",
+				`🔗 Join Meeting: ${response.data.hangoutLink}`
+			);
+
+			// Update the event with the actual Google Meet link in the description
+			try {
+				await this.calendar.events.patch({
+					calendarId: targetCalendarId,
+					eventId: response.data.id,
+					requestBody: {
+						description: updatedDescription.trim(),
+					},
+				});
+				console.log("🔍 [DEBUG] Event description updated with actual Google Meet link");
+			} catch (error) {
+				console.error("Failed to update event description with Google Meet link:", error);
+				// Don't fail the entire operation if description update fails
+			}
 		}
 
 		console.log(`Calendar event created successfully: ${response.data.id}`);

@@ -283,7 +283,7 @@
 							type="search"
 							name="q"
 							value={searchQuery}
-							placeholder="Search bookings..."
+							placeholder="Search by reservation #, guest name, or email..."
 							class="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
 						/>
 						<svg

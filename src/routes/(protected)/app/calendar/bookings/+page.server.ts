@@ -7,8 +7,8 @@ import { and, eq } from "drizzle-orm";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ parent, url, cookies }) => {
-	// Get session and company data from parent layouts
-	const { user, currentCompany } = await parent();
+	// Get session, company data, and calendar status from parent layouts
+	const { user, currentCompany, isCalendarConnected, calendarIntegration } = await parent();
 
 	// Also get the selected company from cookies as backup
 	const selectedCompanyId = cookies.get("selectedCompanyId");
@@ -40,11 +40,9 @@ export const load: PageServerLoad = async ({ parent, url, cookies }) => {
 	const currentView = url.searchParams.get("view") || "month";
 
 	try {
-		const calendarService = new CalendarIntegrationService();
 		const bookingService = new BookingService();
 
-		const [calendarStatus, bookingsResult, companyMeetingTypes] = await Promise.all([
-			calendarService.getCalendarStatus(companyId),
+		const [bookingsResult, companyMeetingTypes] = await Promise.all([
 			bookingService.getByCompanyWithFilters(companyId, user.id, {
 				search: searchQuery,
 				status: statusFilter === "all" ? undefined : statusFilter,
@@ -60,8 +58,8 @@ export const load: PageServerLoad = async ({ parent, url, cookies }) => {
 		]);
 
 		return {
-			isCalendarConnected: calendarStatus.isConnected,
-			calendarIntegration: calendarStatus.integration,
+			isCalendarConnected,
+			calendarIntegration,
 			bookings: bookingsResult.bookings,
 			meetingTypes: companyMeetingTypes,
 			totalBookings: bookingsResult.total,

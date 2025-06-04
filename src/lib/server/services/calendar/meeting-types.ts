@@ -18,6 +18,7 @@ export interface CreateMeetingTypeData {
 	availabilityTemplateId?: string;
 	availabilityTemplateIds?: string[];
 	selectedCalendarId?: string;
+	locationId?: string;
 }
 
 export interface UpdateMeetingTypeData {
@@ -33,6 +34,7 @@ export interface UpdateMeetingTypeData {
 	availabilityTemplateId?: string;
 	availabilityTemplateIds?: string[];
 	selectedCalendarId?: string;
+	locationId?: string;
 }
 
 export class MeetingTypeService {
@@ -59,6 +61,11 @@ export class MeetingTypeService {
 		// Add selectedCalendarId if provided
 		if (data.selectedCalendarId) {
 			insertData.selectedCalendarId = data.selectedCalendarId;
+		}
+
+		// Add locationId if provided
+		if (data.locationId) {
+			insertData.locationId = data.locationId;
 		}
 
 		const meetingType = await db.insert(meetingTypes).values(insertData).returning();

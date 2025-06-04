@@ -24,6 +24,7 @@
 		bufferTimeBefore: data.meetingType.bufferTimeBefore || 0,
 		bufferTimeAfter: data.meetingType.bufferTimeAfter || 0,
 		selectedCalendarId: data.meetingType.selectedCalendarId || "",
+		locationId: data.meetingType.locationId || "",
 	});
 
 	// Initialize selected templates only once
@@ -50,6 +51,10 @@
 		}
 		// Trigger reactivity
 		selectedTemplateIds = new Set(selectedTemplateIds);
+	}
+
+	function handleTemplateChange(templateId) {
+		return () => toggleTemplate(templateId);
 	}
 
 	function getCalendarName(calendarId) {
@@ -245,6 +250,32 @@
 								{/each}
 							</div>
 						</div>
+
+						<!-- Location -->
+						<div>
+							<label for="locationId" class="mb-1 block text-sm font-medium text-gray-700">
+								Location
+							</label>
+							<select
+								id="locationId"
+								name="locationId"
+								bind:value={formData.locationId}
+								class="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+							>
+								<option value="">No location assigned</option>
+								{#each data.locations as location}
+									<option value={location.id}>
+										{location.name} ({location.type === "in-person" ? "In-Person" : "Virtual"})
+									</option>
+								{/each}
+							</select>
+							<p class="mt-1 text-xs text-gray-500">
+								Choose a location for this meeting type. <a
+									href="/app/calendar/locations"
+									class="text-blue-600 hover:text-blue-800">Manage locations</a
+								>
+							</p>
+						</div>
 					</div>
 				</div>
 
@@ -275,7 +306,7 @@
 										name="availabilityTemplateIds"
 										value={template.id}
 										checked={selectedTemplateIds.has(template.id)}
-										onchange={() => toggleTemplate(template.id)}
+										onchange={handleTemplateChange(template.id)}
 										class="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
 									/>
 									<div class="flex-1">

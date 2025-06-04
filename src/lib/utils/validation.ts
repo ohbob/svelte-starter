@@ -10,10 +10,43 @@ export const slugSchema = z
 	.string()
 	.regex(/^[a-z0-9-]+$/, "Slug can only contain lowercase letters, numbers, and hyphens");
 
-// Meeting type validation
+// Location validation
+export const locationSchema = z.discriminatedUnion("type", [
+	// In-person location schema
+	z.object({
+		type: z.literal("in-person"),
+		name: z.string().min(1, "Name is required").max(100, "Name too long"),
+		address: z.string().min(1, "Address is required").max(500, "Address too long"),
+		city: z.string().max(100, "City name too long").optional(),
+		state: z.string().max(100, "State name too long").optional(),
+		country: z.string().max(100, "Country name too long").optional(),
+		postalCode: z.string().max(20, "Postal code too long").optional(),
+		phone: phoneSchema,
+		contactPerson: z.string().max(100, "Contact person name too long").optional(),
+		instructions: z.string().max(1000, "Instructions too long").optional(),
+		description: z.string().max(500, "Description too long").optional(),
+		isDefault: z.boolean().optional(),
+	}),
+	// Virtual location schema
+	z.object({
+		type: z.literal("virtual"),
+		name: z.string().min(1, "Name is required").max(100, "Name too long"),
+		platform: z.enum(["google-meet", "zoom", "teams", "custom"], {
+			errorMap: () => ({ message: "Invalid platform" }),
+		}),
+		autoGenerateLink: z.boolean().optional(),
+		customMeetingUrl: z.string().url("Invalid URL").optional(),
+		meetingInstructions: z.string().max(1000, "Instructions too long").optional(),
+		description: z.string().max(500, "Description too long").optional(),
+		isDefault: z.boolean().optional(),
+	}),
+]);
+
+// Meeting type validation - locationId is now optional for backward compatibility
 export const meetingTypeSchema = z.object({
 	name: z.string().min(1, "Name is required").max(100, "Name too long"),
 	description: z.string().max(500, "Description too long").optional(),
+	locationId: z.string().uuid("Invalid location").optional(),
 	duration: z
 		.number()
 		.min(5, "Duration must be at least 5 minutes")
