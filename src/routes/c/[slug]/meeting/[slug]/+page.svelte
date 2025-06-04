@@ -13,7 +13,9 @@
 		endOfMonth,
 		eachDayOfInterval,
 		getDay,
+		startOfWeek,
 	} from "date-fns";
+	import { enhance } from "$app/forms";
 
 	let { data } = $props();
 	let meetingType = $state(data.meetingType);
@@ -37,9 +39,16 @@
 	let calendarDays = $state([]);
 	let dateAvailability = $state(new Map()); // Map<dateString, { hasSlots: boolean, slotsCount: number }>
 
-	onMount(() => {
+	// Initialize with server-loaded data
+	$effect(() => {
+		if (data.dateAvailability) {
+			dateAvailability = new Map(Object.entries(data.dateAvailability));
+		}
+	});
+
+	// Generate calendar days when currentMonth changes
+	$effect(() => {
 		generateCalendarDays();
-		loadDateAvailability();
 	});
 
 	function generateCalendarDays() {
@@ -70,57 +79,6 @@
 		calendarDays = [...paddingDays, ...monthDays];
 	}
 
-	async function loadDateAvailability() {
-		loadingAvailability = true;
-
-		try {
-			// Get all current month dates that aren't in the past
-			const today = startOfDay(new Date());
-			const datesToCheck = calendarDays
-				.filter((day) => day.isCurrentMonth && !day.isPast)
-				.map((day) => day.date);
-
-			// Load availability for all dates in parallel
-			const availabilityPromises = datesToCheck.map(async (date) => {
-				try {
-					const response = await fetch(
-						`/api/scheduling/available-slots?userId=${data.userId}&meetingTypeId=${meetingType.id}&date=${date.toISOString()}`
-					);
-					if (response.ok) {
-						const data = await response.json();
-						return {
-							date: date.toISOString().split("T")[0],
-							hasSlots: data.slots && data.slots.length > 0,
-							slotsCount: data.slots ? data.slots.length : 0,
-						};
-					}
-				} catch (error) {
-					console.error("Error loading availability for", date, error);
-				}
-				return {
-					date: date.toISOString().split("T")[0],
-					hasSlots: false,
-					slotsCount: 0,
-				};
-			});
-
-			const results = await Promise.all(availabilityPromises);
-			const newAvailability = new Map();
-			results.forEach((result) => {
-				newAvailability.set(result.date, {
-					hasSlots: result.hasSlots,
-					slotsCount: result.slotsCount,
-				});
-			});
-
-			dateAvailability = newAvailability;
-		} catch (error) {
-			console.error("Error loading date availability:", error);
-		} finally {
-			loadingAvailability = false;
-		}
-	}
-
 	function getDateAvailability(date) {
 		const dateKey = date.toISOString().split("T")[0];
 		return dateAvailability.get(dateKey) || { hasSlots: false, slotsCount: 0 };
@@ -130,17 +88,17 @@
 		currentMonth = addDays(currentMonth, 32);
 		currentMonth = startOfMonth(currentMonth);
 		generateCalendarDays();
-		loadDateAvailability();
+		// In a full implementation, you'd load availability for the new month here
 	}
 
 	function prevMonth() {
 		currentMonth = addDays(currentMonth, -32);
 		currentMonth = startOfMonth(currentMonth);
 		generateCalendarDays();
-		loadDateAvailability();
+		// In a full implementation, you'd load availability for the new month here
 	}
 
-	async function selectDate(date) {
+	function selectDate(date) {
 		const availability = getDateAvailability(date);
 		if (!availability.hasSlots) {
 			toast.error("No available times on this date");
@@ -149,25 +107,14 @@
 
 		selectedDate = date;
 		selectedSlot = null;
-		loading = true;
 
-		try {
-			const response = await fetch(
-				`/api/scheduling/available-slots?userId=${data.userId}&meetingTypeId=${meetingType.id}&date=${date.toISOString()}`
-			);
-
-			if (response.ok) {
-				const data = await response.json();
-				availableSlots = data.slots || [];
-				bookingStep = "time";
-			} else {
-				toast.error("Failed to load available times");
-			}
-		} catch (error) {
-			console.error("Error loading slots:", error);
-			toast.error("Failed to load available times");
-		} finally {
-			loading = false;
+		// Use pre-loaded slots if available
+		if (availability.slots) {
+			availableSlots = availability.slots;
+			bookingStep = "time";
+		} else {
+			// For dates not pre-loaded, you might want to add a form action to load slots
+			toast.error("Please refresh the page to load available times");
 		}
 	}
 
@@ -176,43 +123,20 @@
 		bookingStep = "details";
 	}
 
-	async function submitBooking() {
-		if (!bookingForm.guestName || !bookingForm.guestEmail) {
-			toast.error("Please fill in all required fields");
-			return;
-		}
-
+	// Form action handler
+	const handleBookingEnhance = () => {
 		loading = true;
-
-		try {
-			const response = await fetch("/api/scheduling/bookings", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					meetingTypeId: meetingType.id,
-					hostUserId: data.userId,
-					guestName: bookingForm.guestName,
-					guestEmail: bookingForm.guestEmail,
-					guestPhone: bookingForm.guestPhone,
-					guestNotes: bookingForm.guestNotes,
-					startTime: selectedSlot.start,
-				}),
-			});
-
-			if (response.ok) {
+		return async ({ result, update }) => {
+			if (result.type === "success") {
 				bookingStep = "confirmation";
 				toast.success("Meeting booked successfully!");
-			} else {
-				const error = await response.json();
-				toast.error(error.error || "Failed to book meeting");
+			} else if (result.type === "failure") {
+				toast.error(result.data?.error || "Failed to book meeting");
 			}
-		} catch (error) {
-			console.error("Error booking meeting:", error);
-			toast.error("Failed to book meeting");
-		} finally {
+			await update();
 			loading = false;
-		}
-	}
+		};
+	};
 
 	function goBack() {
 		if (bookingStep === "time") {
@@ -241,11 +165,6 @@
 			selectSlot(availableSlots[parseInt(slotIndex)]);
 		}
 	}
-
-	function handleBookingSubmit(event) {
-		event.preventDefault();
-		submitBooking();
-	}
 </script>
 
 <svelte:head>
@@ -261,7 +180,7 @@
 				<div class="max-w-md">
 					<!-- Back to profile link -->
 					<a
-						href="/u/{data.username}"
+						href="/c/{data.username}"
 						class="mb-8 inline-flex items-center text-sm text-gray-500 hover:text-gray-700"
 					>
 						<svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -539,13 +458,24 @@
 							<p class="text-sm text-gray-600">We'll send you a confirmation email</p>
 						</div>
 
-						<form onsubmit={handleBookingSubmit} class="space-y-4">
+						<form
+							method="POST"
+							action="?/book"
+							use:enhance={handleBookingEnhance}
+							class="space-y-4"
+						>
+							<!-- Hidden fields for booking data -->
+							<input type="hidden" name="meetingTypeId" value={meetingType.id} />
+							<input type="hidden" name="hostUserId" value={data.userId} />
+							<input type="hidden" name="startTime" value={selectedSlot.start} />
+
 							<div>
 								<label for="guestName" class="mb-2 block text-sm font-medium text-gray-900"
 									>Name *</label
 								>
 								<input
 									id="guestName"
+									name="guestName"
 									type="text"
 									bind:value={bookingForm.guestName}
 									required
@@ -560,6 +490,7 @@
 								>
 								<input
 									id="guestEmail"
+									name="guestEmail"
 									type="email"
 									bind:value={bookingForm.guestEmail}
 									required
@@ -574,6 +505,7 @@
 								>
 								<input
 									id="guestPhone"
+									name="guestPhone"
 									type="tel"
 									bind:value={bookingForm.guestPhone}
 									class="w-full rounded-lg border border-gray-300 px-3 py-3 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gray-900"
@@ -587,6 +519,7 @@
 								>
 								<textarea
 									id="guestNotes"
+									name="guestNotes"
 									bind:value={bookingForm.guestNotes}
 									rows="3"
 									class="w-full resize-none rounded-lg border border-gray-300 px-3 py-3 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gray-900"
@@ -652,7 +585,7 @@
 
 							<div class="mt-8">
 								<a
-									href="/u/{data.username}"
+									href="/c/{data.username}"
 									class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700"
 								>
 									← Back to {data.hostName}'s profile

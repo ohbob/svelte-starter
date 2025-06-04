@@ -5,7 +5,7 @@ import {
 	CalendarIntegrationService,
 	MeetingTypeService,
 } from "$lib/server/services";
-import { fail } from "@sveltejs/kit";
+import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ parent }) => {
@@ -16,6 +16,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 		return {
 			isCalendarConnected: false,
 			calendarIntegration: null,
+			availableCalendars: [],
 			meetingTypes: [],
 			availabilityTemplates: [],
 			upcomingBookings: 0,
@@ -28,7 +29,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 		const availabilityService = new AvailabilityService();
 		const bookingService = new BookingService();
 
-		// Load calendar status, company data, and booking statistics
+		// Parallelize all independent async operations
 		const [calendarStatus, companyMeetingTypes, companyAvailabilityTemplates, upcomingBookings] =
 			await Promise.all([
 				calendarIntegrationService.getCalendarStatus(currentCompany.id),
@@ -37,9 +38,22 @@ export const load: PageServerLoad = async ({ parent }) => {
 				bookingService.getUpcomingByCompany(currentCompany.id, user.id),
 			]);
 
+		// Get available calendars if connected (depends on calendar status)
+		let availableCalendars = [];
+		if (calendarStatus.isConnected) {
+			try {
+				availableCalendars = await calendarIntegrationService.getAvailableCalendars(
+					currentCompany.id
+				);
+			} catch (error) {
+				console.error("Error fetching available calendars:", error);
+			}
+		}
+
 		return {
 			isCalendarConnected: calendarStatus.isConnected,
 			calendarIntegration: calendarStatus.integration,
+			availableCalendars,
 			meetingTypes: companyMeetingTypes,
 			availabilityTemplates: companyAvailabilityTemplates,
 			upcomingBookings: upcomingBookings.length,
@@ -49,6 +63,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 		return {
 			isCalendarConnected: false,
 			calendarIntegration: null,
+			availableCalendars: [],
 			meetingTypes: [],
 			availabilityTemplates: [],
 			upcomingBookings: 0,
@@ -57,6 +72,35 @@ export const load: PageServerLoad = async ({ parent }) => {
 };
 
 export const actions: Actions = {
+	connect: async ({ request, cookies }) => {
+		const session = await auth.api.getSession({ headers: request.headers });
+
+		if (!session) {
+			return fail(401, { error: "Unauthorized" });
+		}
+
+		// Get current company from cookies to verify user has a company selected
+		const selectedCompanyId = cookies.get("selectedCompanyId");
+
+		if (!selectedCompanyId) {
+			return fail(400, { error: "No company selected" });
+		}
+
+		try {
+			// Use companyId for calendar integration (but internally converts to userId)
+			const calendarIntegrationService = new CalendarIntegrationService();
+			const authUrl = calendarIntegrationService.generateAuthUrl(selectedCompanyId);
+
+			throw redirect(302, authUrl);
+		} catch (error) {
+			if (error instanceof Response) {
+				throw error; // Re-throw redirects
+			}
+			console.error("Error generating auth URL:", error);
+			return fail(500, { error: "Failed to connect calendar" });
+		}
+	},
+
 	disconnect: async ({ request, cookies }) => {
 		const session = await auth.api.getSession({ headers: request.headers });
 

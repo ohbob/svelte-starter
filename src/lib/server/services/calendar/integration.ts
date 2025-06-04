@@ -1,4 +1,5 @@
 import { env } from "$env/dynamic/private";
+import { PUBLIC_BASE_URL } from "$env/static/public";
 import { and, eq } from "drizzle-orm";
 import { google } from "googleapis";
 import { db } from "../../db";
@@ -336,6 +337,7 @@ export class CalendarIntegrationService {
 	// Create calendar event for booking
 	async createEvent(bookingData: {
 		companyId: string;
+		companySlug: string;
 		guestName: string;
 		guestEmail: string;
 		startTime: Date;
@@ -343,17 +345,37 @@ export class CalendarIntegrationService {
 		meetingTypeName: string;
 		duration: number;
 		notes?: string;
+		calendarId?: string; // Optional specific calendar ID for this event
+		cancellationToken?: string; // Cancellation token for client cancellation
 	}): Promise<string> {
 		const integration = await this.setupAuthForCompany(bookingData.companyId);
 
-		const event = {
-			summary: `${bookingData.meetingTypeName} with ${bookingData.guestName}`,
-			description: `
+		// Use the specific calendar ID if provided, otherwise fall back to company default
+		const targetCalendarId =
+			bookingData.calendarId || integration.selectedCalendarId || integration.calendarId;
+
+		if (!targetCalendarId) {
+			throw new Error("No calendar ID available for event creation");
+		}
+
+		console.log(`Creating calendar event in calendar: ${targetCalendarId}`);
+
+		// Build the event description with cancellation link if token is provided
+		let description = `
 Meeting Type: ${bookingData.meetingTypeName}
 Duration: ${bookingData.duration} minutes
 Guest: ${bookingData.guestName} (${bookingData.guestEmail})
-${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
-			`.trim(),
+${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}`;
+
+		// Add cancellation link if token is provided
+		if (bookingData.cancellationToken) {
+			const cancellationUrl = `${PUBLIC_BASE_URL}/c/${bookingData.companySlug}/meeting/cancel/${bookingData.cancellationToken}`;
+			description += `\n\n🔗 Cancel this meeting: ${cancellationUrl}`;
+		}
+
+		const event = {
+			summary: `${bookingData.meetingTypeName} with ${bookingData.guestName}`,
+			description: description.trim(),
 			start: {
 				dateTime: bookingData.startTime.toISOString(),
 				timeZone: "UTC",
@@ -373,7 +395,7 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 		};
 
 		const response = await this.calendar.events.insert({
-			calendarId: integration.selectedCalendarId || integration.calendarId || undefined,
+			calendarId: targetCalendarId,
 			requestBody: event,
 			sendUpdates: "all",
 		});
@@ -382,6 +404,8 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 			throw new Error("Failed to create calendar event");
 		}
 
+		console.log(`Calendar event created successfully: ${response.data.id}`);
+
 		// Clear relevant caches when a booking is made
 		this.clearAllCaches(bookingData.companyId);
 
@@ -389,14 +413,29 @@ ${bookingData.notes ? `\nNotes: ${bookingData.notes}` : ""}
 	}
 
 	// Cancel calendar event
-	async cancelEvent(companyId: string, eventId: string): Promise<void> {
+	async cancelEvent(companyId: string, eventId: string, calendarId?: string): Promise<void> {
 		const integration = await this.setupAuthForCompany(companyId);
 
-		await this.calendar.events.delete({
-			calendarId: integration.selectedCalendarId || integration.calendarId || undefined,
-			eventId,
-			sendUpdates: "all",
-		});
+		// Use the specific calendar ID if provided, otherwise fall back to company default
+		const targetCalendarId = calendarId || integration.selectedCalendarId || integration.calendarId;
+
+		if (!targetCalendarId) {
+			throw new Error("No calendar ID available for event cancellation");
+		}
+
+		console.log(`Cancelling calendar event: ${eventId} from calendar: ${targetCalendarId}`);
+
+		try {
+			await this.calendar.events.delete({
+				calendarId: targetCalendarId,
+				eventId,
+				sendUpdates: "all",
+			});
+			console.log(`Successfully cancelled calendar event: ${eventId}`);
+		} catch (error) {
+			console.error(`Failed to cancel calendar event ${eventId}:`, error);
+			throw error;
+		}
 
 		// Clear relevant caches when an event is cancelled
 		this.clearAllCaches(companyId);

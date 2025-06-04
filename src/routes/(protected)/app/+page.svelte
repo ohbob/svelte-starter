@@ -8,30 +8,6 @@
 	const analyticsData = $derived(data.analytics || {});
 	const currentCompanyId = $derived(data.currentCompanyId);
 	const services = $derived(data.services || []);
-
-	// Test function to add analytics data
-	const addTestData = async () => {
-		if (!currentCompanyId) return;
-
-		try {
-			const response = await fetch("/api/debug-add-analytics", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					companyId: currentCompanyId,
-					views: 10,
-				}),
-			});
-
-			if (response.ok) {
-				// Refresh the page data
-				await invalidateAll();
-				console.log("✅ Test analytics data added and page refreshed");
-			}
-		} catch (error) {
-			console.error("❌ Failed to add test data:", error);
-		}
-	};
 </script>
 
 <div class="p-6">

@@ -1,13 +1,14 @@
-<script>
-	import { Button } from "$lib/components/ui/button";
-	import { toast } from "svelte-sonner";
+<script lang="ts">
+	import { enhance } from "$app/forms";
+	import { page } from "$app/stores";
+	import { toast } from "$lib/utils/toast";
 	import CompanySelector from "$lib/components/ui/company-selector.svelte";
 
 	let { data } = $props();
+
 	let showAddModal = $state(false);
 	let isLoading = $state(false);
 
-	// Form state
 	let formData = $state({
 		name: "",
 		address: "",
@@ -36,32 +37,22 @@
 		};
 	};
 
-	const handleSubmit = async (e) => {
-		e.preventDefault();
+	// Form action handler
+	const handleCreateEnhance = () => {
 		isLoading = true;
-
-		try {
-			const response = await fetch("/api/companies", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(formData),
-			});
-
-			if (response.ok) {
+		return async ({ result, update }) => {
+			if (result.type === "success") {
 				toast.success("Company created successfully!");
 				resetForm();
 				showAddModal = false;
 				// Refresh the page to show new company
 				window.location.reload();
-			} else {
-				const error = await response.json();
-				toast.error(error.message || "Failed to create company");
+			} else if (result.type === "failure") {
+				toast.error(result.data?.error || "Failed to create company");
 			}
-		} catch (error) {
-			toast.error("An error occurred while creating the company");
-		} finally {
+			await update();
 			isLoading = false;
-		}
+		};
 	};
 
 	const openModal = () => {
@@ -166,7 +157,7 @@
 					</button>
 				</div>
 
-				<form on:submit={handleSubmit} class="space-y-4">
+				<form method="POST" action="?/create" use:enhance={handleCreateEnhance} class="space-y-4">
 					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 						<div>
 							<label for="name" class="block text-sm font-medium text-gray-700"
@@ -175,6 +166,7 @@
 							<input
 								type="text"
 								id="name"
+								name="name"
 								bind:value={formData.name}
 								required
 								class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -185,6 +177,7 @@
 							<input
 								type="email"
 								id="email"
+								name="email"
 								bind:value={formData.email}
 								class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
 							/>
@@ -194,6 +187,7 @@
 							<input
 								type="tel"
 								id="phone"
+								name="phone"
 								bind:value={formData.phone}
 								class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
 							/>
@@ -203,6 +197,7 @@
 							<input
 								type="text"
 								id="vat"
+								name="vat"
 								bind:value={formData.vat}
 								class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
 							/>
@@ -214,6 +209,7 @@
 							<input
 								type="text"
 								id="regNr"
+								name="regNr"
 								bind:value={formData.regNr}
 								class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
 							/>
@@ -223,6 +219,7 @@
 							<input
 								type="text"
 								id="country"
+								name="country"
 								bind:value={formData.country}
 								class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
 							/>
@@ -234,6 +231,7 @@
 							<input
 								type="text"
 								id="state"
+								name="state"
 								bind:value={formData.state}
 								class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
 							/>
@@ -243,37 +241,52 @@
 							<input
 								type="text"
 								id="city"
+								name="city"
 								bind:value={formData.city}
 								class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
 							/>
 						</div>
 					</div>
+
 					<div>
 						<label for="address" class="block text-sm font-medium text-gray-700">Address</label>
 						<input
 							type="text"
 							id="address"
+							name="address"
 							bind:value={formData.address}
 							class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
 						/>
 					</div>
+
 					<div>
 						<label for="description" class="block text-sm font-medium text-gray-700"
 							>Description</label
 						>
 						<textarea
 							id="description"
+							name="description"
 							bind:value={formData.description}
 							rows="3"
 							class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
 						></textarea>
 					</div>
 
-					<div class="flex justify-end space-x-3 pt-4">
-						<Button type="button" variant="outline" on:click={closeModal}>Cancel</Button>
-						<Button type="submit" disabled={isLoading}>
+					<div class="flex justify-end gap-3">
+						<button
+							type="button"
+							on:click={closeModal}
+							class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+						>
+							Cancel
+						</button>
+						<button
+							type="submit"
+							disabled={isLoading}
+							class="rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+						>
 							{isLoading ? "Creating..." : "Create Company"}
-						</Button>
+						</button>
 					</div>
 				</form>
 			</div>

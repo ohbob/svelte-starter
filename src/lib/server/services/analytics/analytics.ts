@@ -7,8 +7,22 @@ export interface AnalyticsData {
 	todayViews: number;
 	recentViews: number;
 	uniqueVisitors: number;
-	topReferrers: Array<{ referrer: string; domain: string; path: string | null; views: number }>;
-	todayReferrers: Array<{ referrer: string; domain: string; path: string | null; views: number }>;
+	topReferrers: Array<{
+		referrer: string;
+		domain: string;
+		path: string | null;
+		views: number;
+		percentage: number;
+		source: string;
+	}>;
+	todayReferrers: Array<{
+		referrer: string;
+		domain: string;
+		path: string | null;
+		views: number;
+		percentage: number;
+		source: string;
+	}>;
 	dailyViews: Array<{ date: string; views: number }>;
 	conversionRate: number;
 }
@@ -69,8 +83,8 @@ export class AnalyticsService {
 			.where(and(eq(dailyAnalytics.companyId, companyId), gte(dailyAnalytics.date, startDateStr)))
 			.orderBy(dailyAnalytics.date);
 
-		// Get top referrers (last X days)
-		const topReferrers = await db
+		// Get top referrers (last X days) - limit to 5
+		const topReferrersRaw = await db
 			.select({
 				domain: referrerAnalytics.domain,
 				path: referrerAnalytics.path,
@@ -82,10 +96,10 @@ export class AnalyticsService {
 			)
 			.groupBy(referrerAnalytics.domain, referrerAnalytics.path)
 			.orderBy(desc(sql`sum(views)`))
-			.limit(10);
+			.limit(5);
 
-		// Get today's top referrers
-		const todayReferrers = await db
+		// Get today's top referrers - limit to 5
+		const todayReferrersRaw = await db
 			.select({
 				domain: referrerAnalytics.domain,
 				path: referrerAnalytics.path,
@@ -110,23 +124,36 @@ export class AnalyticsService {
 		const conversionRate =
 			uniqueVisitors > 0 ? (uniqueVisitors / (totalViewsResult[0]?.total || 1)) * 100 : 0;
 
+		// Get total views for percentage calculation
+		const totalRecentViews = recentViewsResult[0]?.total || 0;
+		const totalTodayViews = todayViewsResult[0]?.total || 0;
+
+		// Format referrers with percentages and clean display names
+		const topReferrers = topReferrersRaw.map((r) => ({
+			referrer: r.domain + (r.path || ""),
+			domain: r.domain,
+			path: r.path,
+			views: r.views,
+			percentage: totalRecentViews > 0 ? Math.round((r.views / totalRecentViews) * 100) : 0,
+			source: r.domain === "direct" ? "Direct" : r.domain,
+		}));
+
+		const todayReferrers = todayReferrersRaw.map((r) => ({
+			referrer: r.domain + (r.path || ""),
+			domain: r.domain,
+			path: r.path,
+			views: r.views,
+			percentage: totalTodayViews > 0 ? Math.round((r.views / totalTodayViews) * 100) : 0,
+			source: r.domain === "direct" ? "Direct" : r.domain,
+		}));
+
 		return {
 			totalViews: totalViewsResult[0]?.total || 0,
 			todayViews: todayViewsResult[0]?.total || 0,
 			recentViews: recentViewsResult[0]?.total || 0,
 			uniqueVisitors,
-			topReferrers: topReferrers.map((r) => ({
-				referrer: r.domain + (r.path || ""),
-				domain: r.domain,
-				path: r.path,
-				views: r.views,
-			})),
-			todayReferrers: todayReferrers.map((r) => ({
-				referrer: r.domain + (r.path || ""),
-				domain: r.domain,
-				path: r.path,
-				views: r.views,
-			})),
+			topReferrers,
+			todayReferrers,
 			dailyViews,
 			conversionRate,
 		};

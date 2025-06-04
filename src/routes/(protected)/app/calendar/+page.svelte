@@ -86,9 +86,11 @@
 						</Button>
 					</form>
 				{:else}
-					<a href="/api/calendar/connect">
-						<Button class="bg-blue-600 hover:bg-blue-700">Connect Google Calendar</Button>
-					</a>
+					<form method="POST" action="?/connect" use:enhance>
+						<Button type="submit" class="bg-blue-600 hover:bg-blue-700"
+							>Connect Google Calendar</Button
+						>
+					</form>
 				{/if}
 			</div>
 		</div>

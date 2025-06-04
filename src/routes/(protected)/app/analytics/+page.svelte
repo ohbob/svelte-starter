@@ -1,5 +1,9 @@
 <script lang="ts">
-	let { data } = $props();
+	import { enhance } from "$app/forms";
+	import { toast } from "$lib/utils/toast";
+	import AnalyticsHistogram from "$lib/components/AnalyticsHistogram.svelte";
+
+	let { data, form } = $props();
 
 	// Use derived values instead of state + effect to prevent infinite loops
 	const analyticsData = $derived(
@@ -15,17 +19,6 @@
 
 	const userData = $derived(data?.user);
 
-	// Derived values (computed from analyticsData)
-	const chartData = $derived(
-		analyticsData.dailyViews.map((item) => ({
-			date: new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-			fullDate: item.date,
-			views: item.views,
-		}))
-	);
-
-	const maxViews = $derived(Math.max(...chartData.map((d) => d.views), 1));
-
 	const growth = $derived(
 		(() => {
 			const currentPeriodViews = analyticsData.recentViews;
@@ -39,6 +32,33 @@
 	);
 
 	const isGrowthPositive = $derived(parseFloat(growth) >= 0);
+
+	// Cleanup form state
+	let cleanupLoading = $state(false);
+	let retentionDays = $state(120);
+
+	// Handle cleanup form
+	const handleCleanupEnhance = () => {
+		cleanupLoading = true;
+		return async ({ result, update }) => {
+			if (result.type === "success") {
+				toast.success(result.data?.message || "Analytics cleanup completed successfully!");
+			} else if (result.type === "failure") {
+				toast.error(result.data?.error || "Failed to cleanup analytics");
+			}
+			await update();
+			cleanupLoading = false;
+		};
+	};
+
+	// Handle form results
+	$effect(() => {
+		if (form?.success) {
+			toast.success(form.message || "Analytics cleanup completed successfully!");
+		} else if (form?.error) {
+			toast.error(form.error);
+		}
+	});
 </script>
 
 <!-- Analytics Stats -->
@@ -113,9 +133,9 @@
 			<div>
 				<div class="text-sm font-medium text-gray-500">Avg. Daily Views</div>
 				<div class="text-2xl font-bold text-gray-900">
-					{chartData.length > 0 ? Math.round(analyticsData.recentViews / 30) : 0}
+					{analyticsData.dailyViews.length > 0 ? Math.round(analyticsData.recentViews / 30) : 0}
 				</div>
-				{#if chartData.length === 0 && analyticsData.totalViews > 0}
+				{#if analyticsData.dailyViews.length === 0 && analyticsData.totalViews > 0}
 					<div class="mt-1 text-xs text-gray-400">Will show after multiple days</div>
 				{/if}
 			</div>
@@ -152,35 +172,55 @@
 	</div>
 </div>
 
+<!-- Analytics Histogram -->
+<div class="mb-6">
+	<AnalyticsHistogram
+		dailyViews={analyticsData.dailyViews}
+		topReferrers={analyticsData.topReferrers}
+	/>
+</div>
+
 <!-- Charts and Quick Actions -->
 <div class="grid gap-6 lg:grid-cols-3">
-	<!-- Views Chart -->
+	<!-- Top Referrers -->
 	<div class="overflow-hidden rounded-lg border border-gray-200 bg-white lg:col-span-2">
 		<div class="border-b border-gray-200 px-6 py-4">
-			<h2 class="text-lg font-semibold text-gray-900">Daily Views (Last 30 Days)</h2>
+			<h2 class="text-lg font-semibold text-gray-900">Top Referrers</h2>
 		</div>
 		<div class="p-6">
-			{#if chartData.length > 0}
+			{#if analyticsData.topReferrers.length > 0}
 				<div class="space-y-3">
-					{#each chartData as day}
-						<div class="flex items-center gap-3">
-							<div class="w-16 font-mono text-xs text-gray-500">{day.date}</div>
-							<div class="flex flex-1 items-center gap-2">
-								<div class="relative h-3 flex-1 overflow-hidden rounded-full bg-gray-100">
-									<div
-										class="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-500"
-										style:width="{(day.views / maxViews) * 100}%"
-									></div>
+					{#each analyticsData.topReferrers as referrer}
+						<div class="flex items-center justify-between">
+							<div class="flex items-center gap-3">
+								<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100">
+									<svg
+										class="h-4 w-4 text-gray-600"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+										/>
+									</svg>
 								</div>
-								<div class="w-8 text-right text-xs font-medium text-gray-700">{day.views}</div>
+								<div>
+									<div class="font-medium text-gray-900">{referrer.source}</div>
+									<div class="text-sm text-gray-500">{referrer.views} views</div>
+								</div>
 							</div>
+							<div class="text-sm font-medium text-gray-700">{referrer.percentage}%</div>
 						</div>
 					{/each}
 				</div>
 			{:else}
-				<div class="py-12 text-center">
+				<div class="py-8 text-center">
 					<svg
-						class="mx-auto mb-4 h-16 w-16 text-gray-400"
+						class="mx-auto mb-4 h-12 w-12 text-gray-400"
 						fill="none"
 						stroke="currentColor"
 						viewBox="0 0 24 24"
@@ -189,28 +229,13 @@
 							stroke-linecap="round"
 							stroke-linejoin="round"
 							stroke-width="2"
-							d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+							d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
 						/>
 					</svg>
-					<h3 class="mb-2 text-lg font-medium text-gray-900">No views yet</h3>
-					<p class="text-sm text-gray-500">Share your portfolio to start getting views!</p>
-					{#if userData?.customUrl}
-						<a
-							href="/u/{userData.customUrl}"
-							target="_blank"
-							class="mt-4 inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-						>
-							View My Portfolio
-							<svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-								/>
-							</svg>
-						</a>
-					{/if}
+					<h3 class="mb-2 text-lg font-medium text-gray-900">No referrers yet</h3>
+					<p class="text-sm text-gray-500">
+						When people visit from other sites, they'll appear here.
+					</p>
 				</div>
 			{/if}
 		</div>
@@ -301,5 +326,49 @@
 				</svg>
 			</a>
 		</div>
+	</div>
+</div>
+
+<!-- Analytics Cleanup Section -->
+<div class="mt-8 rounded-lg border border-gray-200 bg-white">
+	<div class="border-b border-gray-200 px-6 py-4">
+		<h2 class="text-lg font-semibold text-gray-900">Analytics Cleanup</h2>
+		<p class="mt-1 text-sm text-gray-600">
+			Remove old analytics data to keep your database clean and improve performance.
+		</p>
+	</div>
+	<div class="p-6">
+		<form method="POST" action="?/cleanup" use:enhance={handleCleanupEnhance} class="space-y-4">
+			<div>
+				<label for="retentionDays" class="block text-sm font-medium text-gray-700">
+					Retention Period (days)
+				</label>
+				<div class="mt-1">
+					<input
+						type="number"
+						id="retentionDays"
+						name="retentionDays"
+						bind:value={retentionDays}
+						min="30"
+						max="365"
+						class="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm"
+					/>
+				</div>
+				<p class="mt-1 text-sm text-gray-500">
+					Analytics data older than this will be permanently deleted.
+				</p>
+			</div>
+
+			<div class="flex items-center justify-between">
+				<div class="text-sm text-gray-600">This action cannot be undone. Please be careful.</div>
+				<button
+					type="submit"
+					disabled={cleanupLoading}
+					class="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					{cleanupLoading ? "Cleaning..." : "Cleanup Analytics"}
+				</button>
+			</div>
+		</form>
 	</div>
 </div>

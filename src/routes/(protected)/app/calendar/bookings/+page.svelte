@@ -1,10 +1,15 @@
 <script lang="ts">
 	import { format } from "date-fns";
-	import { invalidateAll } from "$app/navigation";
+	import { enhance } from "$app/forms";
+	import { page } from "$app/stores";
+	import { toast } from "$lib/utils/toast";
 
 	let { data } = $props();
 
 	let loading = $state(false);
+	let showCancelModal = $state(false);
+	let showRejectModal = $state(false);
+	let selectedBooking = $state(null);
 
 	function formatDateTime(date) {
 		return format(new Date(date), "PPP 'at' p");
@@ -32,57 +37,48 @@
 		}
 	}
 
-	async function handleBookingAction(bookingId, action, reason) {
-		if (loading) return;
-
+	const handleEnhance = () => {
 		loading = true;
-		try {
-			const response = await fetch(`/api/scheduling/bookings/${bookingId}`, {
-				method: "PATCH",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ action, reason }),
-			});
-
-			if (!response.ok) {
-				const error = await response.json();
-				throw new Error(error.error || "Failed to update booking");
-			}
-
-			// Refresh the page data
-			await invalidateAll();
-		} catch (error) {
-			console.error("Error updating booking:", error);
-			alert(error instanceof Error ? error.message : "Failed to update booking");
-		} finally {
+		return async ({ result, update }) => {
+			await update();
 			loading = false;
-		}
+
+			// Show toast notifications based on result
+			if (result.type === "success" && result.data?.success) {
+				if (result.data.message) {
+					toast.success(result.data.message);
+				}
+				// Close modals on success
+				showCancelModal = false;
+				showRejectModal = false;
+				selectedBooking = null;
+			} else if (result.type === "failure" && result.data?.error) {
+				toast.error(result.data.error);
+			}
+		};
+	};
+
+	// Show confirmation dialog for cancellation
+	function showCancelConfirmation(booking) {
+		selectedBooking = booking;
+		showCancelModal = true;
 	}
 
-	async function handleCancel(bookingId) {
-		if (loading) return;
-		if (!confirm("Are you sure you want to cancel this booking?")) return;
+	// Show confirmation dialog for rejection
+	function showRejectConfirmation(booking) {
+		selectedBooking = booking;
+		showRejectModal = true;
+	}
 
-		loading = true;
-		try {
-			const response = await fetch(`/api/scheduling/bookings/${bookingId}`, {
-				method: "DELETE",
-			});
+	// Close modals
+	function closeCancelModal() {
+		showCancelModal = false;
+		selectedBooking = null;
+	}
 
-			if (!response.ok) {
-				const error = await response.json();
-				throw new Error(error.error || "Failed to cancel booking");
-			}
-
-			// Refresh the page data
-			await invalidateAll();
-		} catch (error) {
-			console.error("Error cancelling booking:", error);
-			alert(error instanceof Error ? error.message : "Failed to cancel booking");
-		} finally {
-			loading = false;
-		}
+	function closeRejectModal() {
+		showRejectModal = false;
+		selectedBooking = null;
 	}
 </script>
 
@@ -196,16 +192,75 @@
 										<span class="text-gray-500">{booking.guestNotes}</span>
 									</div>
 								{/if}
+
+								{#if booking.cancellationReason && (booking.status === "cancelled" || booking.status === "rejected")}
+									<div class="flex items-start gap-2">
+										<svg
+											class="mt-0.5 h-4 w-4"
+											fill="none"
+											stroke="currentColor"
+											viewBox="0 0 24 24"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+											></path>
+										</svg>
+										<span class="font-medium text-red-600">{booking.cancellationReason}</span>
+									</div>
+								{/if}
 							</div>
 						</div>
 
 						<div class="flex items-center gap-2">
-							{#if booking.status === "confirmed"}
+							{#if booking.status === "pending"}
+								<!-- Approve Button -->
+								<form method="POST" action="?/approve" use:enhance={handleEnhance}>
+									<input type="hidden" name="bookingId" value={booking.id} />
+									<button
+										type="submit"
+										disabled={loading}
+										class="rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+									>
+										{loading ? "Approving..." : "Approve"}
+									</button>
+								</form>
+
+								<!-- Reject Button -->
 								<button
-									class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+									type="button"
+									disabled={loading}
+									class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+									on:click={() => showRejectConfirmation(booking)}
+								>
+									Reject
+								</button>
+							{:else if booking.status === "confirmed"}
+								<!-- Cancel Button -->
+								<button
+									type="button"
+									disabled={loading}
+									class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+									on:click={() => showCancelConfirmation(booking)}
 								>
 									Cancel
 								</button>
+
+								<!-- Debug Button (only show if no calendar event) -->
+								{#if !booking.googleEventId}
+									<form method="POST" action="?/debug" use:enhance={handleEnhance}>
+										<input type="hidden" name="bookingId" value={booking.id} />
+										<button
+											type="submit"
+											disabled={loading}
+											class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+										>
+											{loading ? "Debugging..." : "Debug"}
+										</button>
+									</form>
+								{/if}
 							{/if}
 
 							{#if booking.googleEventId}
@@ -245,3 +300,71 @@
 		</div>
 	{/if}
 </div>
+
+<!-- Cancel Confirmation Modal -->
+{#if showCancelModal && selectedBooking}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+		<div class="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+			<h3 class="mb-2 text-lg font-medium text-gray-900">Cancel Booking</h3>
+			<p class="mb-4 text-sm text-gray-600">
+				Are you sure you want to cancel the booking with {selectedBooking.guestName} for "{selectedBooking
+					.meetingType.name}"? This action cannot be undone.
+			</p>
+			<div class="flex items-center justify-end space-x-3">
+				<button
+					type="button"
+					on:click={closeCancelModal}
+					disabled={loading}
+					class="px-4 py-2 text-gray-700 hover:text-gray-900 disabled:opacity-50"
+				>
+					Cancel
+				</button>
+				<form method="POST" action="?/cancel" use:enhance={handleEnhance} class="inline">
+					<input type="hidden" name="bookingId" value={selectedBooking.id} />
+					<input type="hidden" name="reason" value="Cancelled by host" />
+					<button
+						type="submit"
+						disabled={loading}
+						class="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+					>
+						{loading ? "Cancelling..." : "Cancel Booking"}
+					</button>
+				</form>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Reject Confirmation Modal -->
+{#if showRejectModal && selectedBooking}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+		<div class="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+			<h3 class="mb-2 text-lg font-medium text-gray-900">Reject Booking</h3>
+			<p class="mb-4 text-sm text-gray-600">
+				Are you sure you want to reject the booking request from {selectedBooking.guestName} for "{selectedBooking
+					.meetingType.name}"?
+			</p>
+			<div class="flex items-center justify-end space-x-3">
+				<button
+					type="button"
+					on:click={closeRejectModal}
+					disabled={loading}
+					class="px-4 py-2 text-gray-700 hover:text-gray-900 disabled:opacity-50"
+				>
+					Cancel
+				</button>
+				<form method="POST" action="?/reject" use:enhance={handleEnhance} class="inline">
+					<input type="hidden" name="bookingId" value={selectedBooking.id} />
+					<input type="hidden" name="reason" value="Rejected by host" />
+					<button
+						type="submit"
+						disabled={loading}
+						class="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+					>
+						{loading ? "Rejecting..." : "Reject Booking"}
+					</button>
+				</form>
+			</div>
+		</div>
+	</div>
+{/if}

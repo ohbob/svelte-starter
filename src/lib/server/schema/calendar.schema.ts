@@ -115,6 +115,7 @@ export const bookings = pgTable("bookings", {
 	googleEventId: text("google_event_id"), // Google Calendar event ID
 	meetingLink: text("meeting_link"), // Zoom, Meet, etc.
 	cancellationReason: text("cancellation_reason"),
+	cancellationToken: text("cancellation_token").unique(), // Secure token for client cancellation
 	createdAt: timestamp("created_at").notNull().defaultNow(),
 	updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

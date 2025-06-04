@@ -118,7 +118,7 @@
 							</div>
 
 							<a
-								href="/c/{data.company.slug}/schedule/{meetingType.slug}"
+								href="/c/{data.company.slug}/meeting/{meetingType.slug}"
 								class="block w-full rounded-lg bg-blue-600 px-4 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-blue-700"
 							>
 								Book Meeting

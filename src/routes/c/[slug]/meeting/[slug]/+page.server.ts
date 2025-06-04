@@ -2,19 +2,20 @@ import { db } from "$lib/server/db";
 import { companies } from "$lib/server/schema";
 import {
 	AvailabilityService,
+	BookingService,
 	CalendarIntegrationService,
 	MeetingTypeService,
 } from "$lib/server/services";
 import type { AvailabilitySlot } from "$lib/server/services/calendar/availability";
-import { error } from "@sveltejs/kit";
+import { error, fail } from "@sveltejs/kit";
 import { addDays, addMinutes, format, startOfDay } from "date-fns";
 import { eq } from "drizzle-orm";
-import type { PageServerLoad } from "./$types";
+import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ params, url }) => {
 	// Extract company slug and meeting slug from the URL path
 	const pathParts = url.pathname.split("/");
-	const companySlug = pathParts[2]; // /c/[companySlug]/schedule/[meetingSlug]
+	const companySlug = pathParts[2]; // /c/[companySlug]/meeting/[meetingSlug]
 	const meetingSlug = pathParts[4];
 
 	try {
@@ -190,3 +191,41 @@ function calculateAvailableSlots(
 
 	return slots;
 }
+
+export const actions: Actions = {
+	book: async ({ request }) => {
+		try {
+			const data = await request.formData();
+
+			const meetingTypeId = data.get("meetingTypeId") as string;
+			const hostUserId = data.get("hostUserId") as string;
+			const guestName = data.get("guestName") as string;
+			const guestEmail = data.get("guestEmail") as string;
+			const guestPhone = data.get("guestPhone") as string;
+			const guestNotes = data.get("guestNotes") as string;
+			const startTime = data.get("startTime") as string;
+
+			// Validate required fields
+			if (!meetingTypeId || !hostUserId || !guestName || !guestEmail || !startTime) {
+				return fail(400, { error: "Missing required fields" });
+			}
+
+			// Create the booking
+			const bookingService = new BookingService();
+			const booking = await bookingService.create({
+				meetingTypeId,
+				hostUserId,
+				guestName,
+				guestEmail,
+				guestPhone: guestPhone || undefined,
+				guestNotes: guestNotes || undefined,
+				startTime: new Date(startTime),
+			});
+
+			return { success: true, booking };
+		} catch (error) {
+			console.error("Error creating booking:", error);
+			return fail(500, { error: "Failed to create booking" });
+		}
+	},
+};
