@@ -33,7 +33,7 @@ export const load: PageServerLoad = async ({ parent, url, cookies }) => {
 	}
 
 	// Get search and pagination parameters
-	const searchQuery = url.searchParams.get("search") || "";
+	const searchQuery = url.searchParams.get("q") || url.searchParams.get("search") || "";
 	const statusFilter = url.searchParams.get("status") || "all";
 	const page = parseInt(url.searchParams.get("page") || "1");
 	const limit = 10; // bookings per page

@@ -25,6 +25,8 @@
 
 	// Track expanded days for month view
 	let expandedDays = $state(new Set());
+	let hoveredBooking = $state(null);
+	let tooltipPosition = $state({ x: 0, y: 0 });
 
 	// Calendar days calculation
 	let calendarDays = $derived(() => {
@@ -108,6 +110,31 @@
 		}
 		expandedDays = new Set(expandedDays); // Trigger reactivity
 	}
+
+	function handleRejectClick(booking) {
+		onShowRejectConfirmation(booking);
+	}
+
+	function handleCancelClick(booking) {
+		onShowCancelConfirmation(booking);
+	}
+
+	function handleNoteClick(booking) {
+		onOpenNoteModal(booking);
+	}
+
+	function handleToggleExpansion(dateKey) {
+		toggleDayExpansion(dateKey);
+	}
+
+	function handleBookingMouseEnter(booking, event) {
+		hoveredBooking = booking;
+		tooltipPosition = { x: event.clientX, y: event.clientY };
+	}
+
+	function handleBookingMouseLeave() {
+		hoveredBooking = null;
+	}
 </script>
 
 <div class="p-4">
@@ -121,16 +148,22 @@
 			{/each}
 		</div>
 		<!-- Calendar Days -->
-		<div class="grid grid-cols-7 gap-px rounded-lg border border-gray-200 bg-gray-200">
+		<div class="grid grid-cols-7 gap-0 overflow-hidden rounded-lg border border-gray-200 bg-white">
 			{#each calendarDays() as day}
 				{@const dateKey = format(day, "yyyy-MM-dd")}
 				{@const dayBookings = bookingsByDate().get(dateKey) || []}
 				{@const isExpanded = expandedDays.has(dateKey)}
-				{@const visibleBookings = isExpanded ? dayBookings : dayBookings.slice(0, 3)}
+				{@const visibleBookings = isExpanded ? dayBookings : dayBookings.slice(0, 2)}
 				<div
-					class="min-h-[80px] bg-white p-1 {!isSameMonth(day, currentDate)
+					class="relative flex flex-col border-b border-r border-gray-200 p-2 {!isSameMonth(
+						day,
+						currentDate
+					)
 						? 'bg-gray-50'
-						: ''} {isToday(day) ? 'bg-blue-50' : ''}"
+						: ''} {isToday(day) ? 'bg-blue-50' : 'bg-white'} {isExpanded && dayBookings.length > 2
+						? 'min-h-40'
+						: 'min-h-24'}"
+					style="overflow: visible;"
 				>
 					<div
 						class="mb-1 text-xs {!isSameMonth(day, currentDate)
@@ -143,22 +176,27 @@
 					</div>
 
 					{#if dayBookings.length > 0}
-						<div class="space-y-0.5">
+						<div class="min-h-0 flex-1 space-y-0.5">
 							{#each visibleBookings as booking}
 								<div
 									class="group relative rounded px-1.5 py-0.5 text-xs {getStatusColor(
 										booking.status
-									)} hover:shadow-sm"
+									)} cursor-pointer hover:shadow-sm"
+									onmouseenter={(e) => handleBookingMouseEnter(booking, e)}
+									onmouseleave={handleBookingMouseLeave}
+									title="{booking.meetingType.name} - {formatDateTime(
+										booking.startTime
+									)} with {booking.guestName}"
 								>
 									<div class="flex items-center justify-between">
 										<div class="flex min-w-0 flex-1 items-center gap-1">
 											<div class="h-1 w-1 rounded-full {getStatusDot(booking.status)}"></div>
 											<span class="truncate text-xs font-medium"
-												>{formatTime(booking.startTime)}</span
+												>{formatTime(booking.startTime)} {booking.guestName}</span
 											>
 										</div>
 
-										<!-- Action Icons - Larger for mobile -->
+										<!-- Action Icons -->
 										<div
 											class="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100"
 										>
@@ -193,7 +231,7 @@
 												<button
 													type="button"
 													title="Reject"
-													onclick={() => onShowRejectConfirmation(booking)}
+													onclick={() => handleRejectClick(booking)}
 													class="touch-manipulation rounded p-1 text-red-700 hover:bg-red-200"
 												>
 													<svg
@@ -214,7 +252,7 @@
 												<button
 													type="button"
 													title="Cancel"
-													onclick={() => onShowCancelConfirmation(booking)}
+													onclick={() => handleCancelClick(booking)}
 													class="touch-manipulation rounded p-1 text-red-700 hover:bg-red-200"
 												>
 													<svg
@@ -235,7 +273,7 @@
 											<button
 												type="button"
 												title={booking.hostNotes ? "Edit Note" : "Add Note"}
-												onclick={() => onOpenNoteModal(booking)}
+												onclick={() => handleNoteClick(booking)}
 												class="touch-manipulation rounded p-1 text-gray-700 hover:bg-gray-200"
 											>
 												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -243,76 +281,34 @@
 														stroke-linecap="round"
 														stroke-linejoin="round"
 														stroke-width="2"
-														d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+														d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
 													/>
 												</svg>
 											</button>
 										</div>
 									</div>
-									<div class="truncate text-xs text-gray-700">{booking.guestName}</div>
-
-									<!-- Comprehensive Tooltip -->
-									<div
-										class="absolute bottom-full left-0 z-50 mb-2 hidden w-80 rounded-lg border border-gray-200 bg-white p-4 shadow-xl group-hover:block"
-										style="z-index: 9999;"
-									>
-										<div class="space-y-3 text-sm">
-											<!-- Meeting Type & Duration -->
-											<div>
-												<div class="font-semibold text-gray-900">{booking.meetingType.name}</div>
-												<div class="text-gray-600">{formatDateTime(booking.startTime)}</div>
-												<div class="text-gray-600">{booking.meetingType.duration}m duration</div>
-											</div>
-
-											<!-- Guest Information -->
-											<div class="border-t border-gray-200 pt-3">
-												<div class="font-medium text-gray-900">Guest Details</div>
-												<div class="text-gray-700">{booking.guestName}</div>
-												<div class="text-gray-600">{booking.guestEmail}</div>
-												{#if booking.guestPhone}
-													<div class="text-gray-600">{booking.guestPhone}</div>
-												{/if}
-											</div>
-
-											<!-- Guest Notes -->
-											{#if booking.guestNotes}
-												<div class="border-t border-gray-200 pt-3">
-													<div class="font-medium text-gray-900">Guest Message</div>
-													<div class="text-xs text-gray-700">{booking.guestNotes}</div>
-												</div>
-											{/if}
-
-											<!-- Host Notes -->
-											{#if booking.hostNotes}
-												<div class="border-t border-gray-200 pt-3">
-													<div class="font-medium text-blue-700">Your Note</div>
-													<div class="text-xs text-blue-600">{booking.hostNotes}</div>
-												</div>
-											{/if}
-
-											<!-- Cancellation/Rejection Reason -->
-											{#if (booking.status === "cancelled" || booking.status === "rejected") && booking.cancellationReason}
-												<div class="border-t border-gray-200 pt-3">
-													<div class="font-medium text-red-700">
-														{booking.status === "cancelled" ? "Cancellation" : "Rejection"} Reason
-													</div>
-													<div class="break-words text-xs text-red-600">
-														{booking.cancellationReason}
-													</div>
-												</div>
-											{/if}
-										</div>
-									</div>
 								</div>
 							{/each}
-							{#if dayBookings.length > 3}
-								<button
-									type="button"
-									onclick={() => toggleDayExpansion(dateKey)}
-									class="w-full touch-manipulation rounded px-1.5 py-0.5 text-left text-xs text-blue-600 hover:bg-blue-50 hover:text-blue-800"
-								>
-									{isExpanded ? "Show less" : `+${dayBookings.length - 3} more`}
-								</button>
+							{#if dayBookings.length > 2 && !isExpanded}
+								<div class="mt-1">
+									<button
+										type="button"
+										onclick={() => handleToggleExpansion(dateKey)}
+										class="w-full touch-manipulation rounded px-1.5 py-0.5 text-left text-xs text-blue-600 hover:bg-blue-50 hover:text-blue-800"
+									>
+										+{dayBookings.length - 2} more
+									</button>
+								</div>
+							{:else if isExpanded && dayBookings.length > 2}
+								<div class="mt-1">
+									<button
+										type="button"
+										onclick={() => handleToggleExpansion(dateKey)}
+										class="w-full touch-manipulation rounded px-1.5 py-0.5 text-left text-xs text-blue-600 hover:bg-blue-50 hover:text-blue-800"
+									>
+										Show less
+									</button>
+								</div>
 							{/if}
 						</div>
 					{/if}
@@ -332,11 +328,14 @@
 			{/each}
 		</div>
 		<!-- Week Days -->
-		<div class="grid grid-cols-7 gap-px rounded-lg border border-gray-200 bg-gray-200">
+		<div
+			class="grid grid-cols-7 gap-px rounded-lg border border-gray-200 bg-gray-200"
+			style="height: 500px;"
+		>
 			{#each calendarDays() as day}
 				{@const dateKey = format(day, "yyyy-MM-dd")}
 				{@const dayBookings = bookingsByDate().get(dateKey) || []}
-				<div class="min-h-[120px] bg-white p-1.5 {isToday(day) ? 'bg-blue-50' : ''}">
+				<div class="bg-white p-1.5 {isToday(day) ? 'bg-blue-50' : ''}">
 					{#if dayBookings.length > 0}
 						<div class="space-y-1">
 							{#each dayBookings as booking}
@@ -348,7 +347,9 @@
 									<div class="mb-1 flex items-center justify-between">
 										<div class="flex min-w-0 flex-1 items-center gap-1">
 											<div class="h-1.5 w-1.5 rounded-full {getStatusDot(booking.status)}"></div>
-											<span class="truncate font-medium">{formatTime(booking.startTime)}</span>
+											<span class="truncate font-medium"
+												>{formatTime(booking.startTime)} {booking.guestName}</span
+											>
 										</div>
 
 										<!-- Action Icons - Larger for mobile -->
@@ -386,7 +387,7 @@
 												<button
 													type="button"
 													title="Reject"
-													onclick={() => onShowRejectConfirmation(booking)}
+													onclick={() => handleRejectClick(booking)}
 													class="touch-manipulation rounded p-1.5 text-red-700 hover:bg-red-200"
 												>
 													<svg
@@ -407,7 +408,7 @@
 												<button
 													type="button"
 													title="Cancel"
-													onclick={() => onShowCancelConfirmation(booking)}
+													onclick={() => handleCancelClick(booking)}
 													class="touch-manipulation rounded p-1.5 text-red-700 hover:bg-red-200"
 												>
 													<svg
@@ -428,7 +429,7 @@
 											<button
 												type="button"
 												title={booking.hostNotes ? "Edit Note" : "Add Note"}
-												onclick={() => onOpenNoteModal(booking)}
+												onclick={() => handleNoteClick(booking)}
 												class="touch-manipulation rounded p-1.5 text-gray-700 hover:bg-gray-200"
 											>
 												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -436,14 +437,12 @@
 														stroke-linecap="round"
 														stroke-linejoin="round"
 														stroke-width="2"
-														d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+														d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
 													/>
 												</svg>
 											</button>
 										</div>
 									</div>
-									<div class="truncate text-gray-700">{booking.guestName}</div>
-									<div class="truncate text-xs text-gray-500">{booking.meetingType.name}</div>
 
 									<!-- Comprehensive Tooltip -->
 									<div
@@ -506,3 +505,56 @@
 		</div>
 	{/if}
 </div>
+
+<!-- Global Tooltip -->
+{#if hoveredBooking}
+	<div
+		class="pointer-events-none fixed z-[99999] w-80 rounded-lg border border-gray-200 bg-white p-4 shadow-xl"
+		style="left: {tooltipPosition.x + 10}px; top: {tooltipPosition.y - 10}px;"
+	>
+		<div class="space-y-3 text-sm">
+			<!-- Meeting Type & Duration -->
+			<div>
+				<div class="font-semibold text-gray-900">{hoveredBooking.meetingType.name}</div>
+				<div class="text-gray-600">{formatDateTime(hoveredBooking.startTime)}</div>
+				<div class="text-gray-600">{hoveredBooking.meetingType.duration}m duration</div>
+			</div>
+
+			<!-- Guest Information -->
+			<div class="border-t border-gray-200 pt-3">
+				<div class="font-medium text-gray-900">Guest Details</div>
+				<div class="text-gray-700">{hoveredBooking.guestName}</div>
+				<div class="text-gray-600">{hoveredBooking.guestEmail}</div>
+				{#if hoveredBooking.guestPhone}
+					<div class="text-gray-600">{hoveredBooking.guestPhone}</div>
+				{/if}
+			</div>
+
+			<!-- Guest Notes -->
+			{#if hoveredBooking.guestNotes}
+				<div class="border-t border-gray-200 pt-3">
+					<div class="font-medium text-gray-900">Guest Message</div>
+					<div class="text-xs text-gray-700">{hoveredBooking.guestNotes}</div>
+				</div>
+			{/if}
+
+			<!-- Host Notes -->
+			{#if hoveredBooking.hostNotes}
+				<div class="border-t border-gray-200 pt-3">
+					<div class="font-medium text-blue-700">Your Note</div>
+					<div class="text-xs text-blue-600">{hoveredBooking.hostNotes}</div>
+				</div>
+			{/if}
+
+			<!-- Cancellation/Rejection Reason -->
+			{#if (hoveredBooking.status === "cancelled" || hoveredBooking.status === "rejected") && hoveredBooking.cancellationReason}
+				<div class="border-t border-gray-200 pt-3">
+					<div class="font-medium text-red-700">
+						{hoveredBooking.status === "cancelled" ? "Cancellation" : "Rejection"} Reason
+					</div>
+					<div class="break-words text-xs text-red-600">{hoveredBooking.cancellationReason}</div>
+				</div>
+			{/if}
+		</div>
+	</div>
+{/if}
