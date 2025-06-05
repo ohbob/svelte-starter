@@ -103,127 +103,145 @@
 	};
 </script>
 
-<div class="mx-auto max-w-6xl p-6">
-	<div class="mb-8">
-		<h1 class="mb-2 text-3xl font-bold text-gray-900">
-			{isEdit ? "Edit Availability Template" : "Create Availability Template"}
-		</h1>
-		<p class="text-gray-600">
-			{isEdit
-				? "Update your availability template settings"
-				: "Set up when you're available for meetings"}
-		</p>
+<div class="space-y-6">
+	<!-- Header -->
+	<div class="flex items-center justify-between">
+		<div>
+			<nav class="mb-2 flex items-center space-x-2 text-sm text-gray-500">
+				<a href="/app/calendar" class="hover:text-gray-700">Calendar</a>
+				<span>→</span>
+				<a href="/app/calendar/availability" class="hover:text-gray-700">Availability Templates</a>
+				<span>→</span>
+				<span class="text-gray-900">{isEdit ? "Edit" : "New"}</span>
+			</nav>
+			<h1 class="text-2xl font-semibold text-gray-900">
+				{isEdit ? "Edit Availability Template" : "Create Availability Template"}
+			</h1>
+			<p class="text-gray-600">
+				{isEdit
+					? "Update your availability template settings"
+					: "Set up when you're available for meetings"}
+			</p>
+		</div>
+		<div class="flex items-center gap-3">
+			<a href="/app/calendar/availability">
+				<button
+					type="button"
+					class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+				>
+					Cancel
+				</button>
+			</a>
+		</div>
 	</div>
 
-	<form
-		method="POST"
-		{action}
-		use:enhance={handleSubmit}
-		class="grid grid-cols-1 gap-8 lg:grid-cols-2"
-	>
-		<!-- Left Column: Basic Information -->
-		<div class="space-y-6">
-			<div class="rounded-lg border border-gray-200 bg-white p-6">
-				<h2 class="mb-4 text-xl font-semibold text-gray-900">Basic Information</h2>
+	<!-- Main Form -->
+	<form method="POST" {action} use:enhance={handleSubmit} class="space-y-8">
+		<div class="grid gap-8 lg:grid-cols-2">
+			<!-- Left Column: Basic Information -->
+			<div class="space-y-6">
+				<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+					<h2 class="mb-4 text-lg font-medium text-gray-900">Basic Information</h2>
 
-				<div class="space-y-4">
-					<div>
-						<label for="name" class="mb-1 block text-sm font-medium text-gray-700">
-							Template Name *
-						</label>
-						<input
-							type="text"
-							id="name"
-							name="name"
-							bind:value={name}
-							required
-							class="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-							placeholder="e.g., Standard Business Hours"
-						/>
-					</div>
-
-					<div>
-						<label for="description" class="mb-1 block text-sm font-medium text-gray-700">
-							Description
-						</label>
-						<textarea
-							id="description"
-							name="description"
-							bind:value={description}
-							rows="3"
-							class="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-							placeholder="Optional description for this template"
-						></textarea>
-					</div>
-
-					<div class="flex items-center">
-						<input
-							type="checkbox"
-							id="isDefault"
-							name="isDefault"
-							bind:checked={isDefault}
-							class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-						/>
-						<label for="isDefault" class="ml-2 block text-sm text-gray-700">
-							Set as default template
-						</label>
-					</div>
-				</div>
-			</div>
-		</div>
-
-		<!-- Right Column: Time Slots -->
-		<div class="space-y-6">
-			<div class="rounded-lg border border-gray-200 bg-white p-6">
-				<h2 class="mb-4 text-xl font-semibold text-gray-900">Available Hours</h2>
-
-				<div class="space-y-2">
-					{#each daysOfWeek as day}
-						{@const slot = timeSlots.find((s) => s.day === day.key)}
-						<div class="flex min-h-[50px] items-center gap-4 rounded-lg p-2">
-							<div class="flex min-w-[100px] items-center">
-								<input
-									type="checkbox"
-									id="day-{day.key}"
-									checked={slot?.enabled || false}
-									onchange={() => toggleDay(day.key)}
-									class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-								/>
-								<label for="day-{day.key}" class="ml-2 text-sm font-medium text-gray-700">
-									{day.label}
-								</label>
-							</div>
-
-							{#if slot?.enabled}
-								<div class="flex flex-1 items-center gap-2">
-									<input
-										type="time"
-										value={slot.startTime}
-										onchange={(e) => updateTimeSlot(day.key, "startTime", e.target.value)}
-										class="rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-									/>
-									<span class="text-sm text-gray-500">to</span>
-									<input
-										type="time"
-										value={slot.endTime}
-										onchange={(e) => updateTimeSlot(day.key, "endTime", e.target.value)}
-										class="rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-									/>
-								</div>
-							{:else}
-								<div class="flex-1 text-sm text-gray-500">Unavailable</div>
-							{/if}
+					<div class="space-y-4">
+						<div>
+							<label for="name" class="mb-1 block text-sm font-medium text-gray-700">
+								Template Name *
+							</label>
+							<input
+								type="text"
+								id="name"
+								name="name"
+								bind:value={name}
+								required
+								class="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+								placeholder="e.g., Standard Business Hours"
+							/>
 						</div>
-					{/each}
+
+						<div>
+							<label for="description" class="mb-1 block text-sm font-medium text-gray-700">
+								Description
+							</label>
+							<textarea
+								id="description"
+								name="description"
+								bind:value={description}
+								rows="3"
+								class="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+								placeholder="Optional description for this template"
+							></textarea>
+						</div>
+
+						<div class="flex items-center">
+							<input
+								type="checkbox"
+								id="isDefault"
+								name="isDefault"
+								bind:checked={isDefault}
+								class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+							/>
+							<label for="isDefault" class="ml-2 block text-sm text-gray-700">
+								Set as default template
+							</label>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Right Column: Time Slots -->
+			<div class="space-y-6">
+				<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+					<h2 class="mb-4 text-lg font-medium text-gray-900">Available Hours</h2>
+
+					<div class="space-y-2">
+						{#each daysOfWeek as day}
+							{@const slot = timeSlots.find((s) => s.day === day.key)}
+							<div class="flex min-h-[50px] items-center gap-4 rounded-lg p-2">
+								<div class="flex min-w-[100px] items-center">
+									<input
+										type="checkbox"
+										id="day-{day.key}"
+										checked={slot?.enabled || false}
+										onchange={() => toggleDay(day.key)}
+										class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+									/>
+									<label for="day-{day.key}" class="ml-2 text-sm font-medium text-gray-700">
+										{day.label}
+									</label>
+								</div>
+
+								{#if slot?.enabled}
+									<div class="flex flex-1 items-center gap-2">
+										<input
+											type="time"
+											value={slot.startTime}
+											onchange={(e) => updateTimeSlot(day.key, "startTime", e.target.value)}
+											class="rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+										/>
+										<span class="text-sm text-gray-500">to</span>
+										<input
+											type="time"
+											value={slot.endTime}
+											onchange={(e) => updateTimeSlot(day.key, "endTime", e.target.value)}
+											class="rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+										/>
+									</div>
+								{:else}
+									<div class="flex-1 text-sm text-gray-500">Unavailable</div>
+								{/if}
+							</div>
+						{/each}
+					</div>
 				</div>
 			</div>
 		</div>
 
-		<!-- Hidden input for slots data - convert to database format -->
+		<!-- Hidden input for slots data -->
 		<input type="hidden" name="slots" value={JSON.stringify(convertSlotsToDbFormat(timeSlots))} />
 
 		<!-- Action Buttons -->
-		<div class="flex items-center justify-between border-t border-gray-200 pt-6 lg:col-span-2">
+		<div class="flex items-center justify-between border-t border-gray-200 pt-6">
 			<div>
 				{#if isEdit}
 					<button
@@ -237,11 +255,13 @@
 			</div>
 
 			<div class="flex items-center gap-3">
-				<a
-					href="/app/calendar/availability"
-					class="px-4 py-2 font-medium text-gray-700 hover:text-gray-900"
-				>
-					Cancel
+				<a href="/app/calendar/availability">
+					<button
+						type="button"
+						class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+					>
+						Cancel
+					</button>
 				</a>
 				<button
 					type="submit"
@@ -267,17 +287,16 @@
 				<button
 					type="button"
 					onclick={() => (showDeleteModal = false)}
-					class="px-4 py-2 text-gray-700 hover:text-gray-900"
+					class="px-4 py-2 font-medium text-gray-700 hover:text-gray-900"
 				>
 					Cancel
 				</button>
 				<form method="POST" action="?/delete" use:enhance={handleDelete} class="inline">
 					<button
 						type="submit"
-						disabled={loading}
-						class="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+						class="rounded-md bg-red-600 px-4 py-2 font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
 					>
-						{loading ? "Deleting..." : "Delete"}
+						Delete
 					</button>
 				</form>
 			</div>

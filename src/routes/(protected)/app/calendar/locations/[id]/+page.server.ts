@@ -28,14 +28,20 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 
 export const actions: Actions = {
 	update: async ({ params, request, cookies }) => {
+		console.log("Location update action called for ID:", params.id);
+
 		const selectedCompanyId = cookies.get("selectedCompanyId");
+		console.log("Selected company ID:", selectedCompanyId);
 
 		if (!selectedCompanyId) {
+			console.log("No selected company ID, redirecting to companies");
 			throw redirect(302, "/app/companies");
 		}
 
 		try {
 			const formData = await request.formData();
+			console.log("Form data received:", Object.fromEntries(formData.entries()));
+
 			const data = {
 				type: formData.get("type") as string,
 				name: formData.get("name") as string,
@@ -59,9 +65,12 @@ export const actions: Actions = {
 				meetingInstructions: (formData.get("meetingInstructions") as string) || undefined,
 			};
 
+			console.log("Parsed data:", data);
+
 			// Validate the data
 			const validation = locationSchema.safeParse(data);
 			if (!validation.success) {
+				console.log("Validation failed:", validation.error.flatten().fieldErrors);
 				const errors = validation.error.flatten().fieldErrors;
 				return fail(400, {
 					error: "Validation failed",
@@ -70,21 +79,23 @@ export const actions: Actions = {
 				});
 			}
 
+			console.log("Validation passed, updating location");
+
 			// Update the location
 			const location = await LocationService.update(params.id, selectedCompanyId, validation.data);
 
 			if (!location) {
+				console.log("Location not found or update failed");
 				return fail(404, { error: "Location not found" });
 			}
 
-			// Redirect to locations list
-			throw redirect(302, "/app/calendar/locations");
+			console.log("Location updated successfully, redirecting to /app/calendar/locations");
 		} catch (error) {
-			if (error instanceof Response) {
-				throw error; // Re-throw redirects
-			}
 			console.error("Error updating location:", error);
 			return fail(500, { error: "Failed to update location" });
 		}
+
+		// Redirect to locations list (outside try-catch to avoid being caught)
+		redirect(302, "/app/calendar/locations");
 	},
 };

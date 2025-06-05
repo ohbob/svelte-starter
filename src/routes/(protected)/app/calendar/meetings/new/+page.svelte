@@ -338,7 +338,14 @@
 											name="availabilityTemplateIds"
 											value={template.id}
 											checked={selectedTemplateIds.has(template.id)}
-											onchange={() => toggleTemplate(template.id)}
+											onchange={(e) => {
+												if (e.target.checked) {
+													selectedTemplateIds.add(template.id);
+												} else {
+													selectedTemplateIds.delete(template.id);
+												}
+												selectedTemplateIds = new Set(selectedTemplateIds);
+											}}
 											class="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
 										/>
 										<div class="flex-1">

@@ -103,7 +103,7 @@ export class BookingService {
 					);
 				}
 
-				const eventId = await this.calendarService.createEvent({
+				const eventResult = await this.calendarService.createEvent({
 					companyId: meetingType.companyId,
 					companySlug: meetingType.company.slug,
 					guestName: data.guestName,
@@ -119,10 +119,13 @@ export class BookingService {
 					bookingId: booking[0].id, // Include booking ID as reservation number
 				});
 
-				// Update booking with Google event ID
+				// Update booking with Google event ID and meeting link
 				await db
 					.update(bookings)
-					.set({ googleEventId: eventId })
+					.set({
+						googleEventId: eventResult.eventId,
+						meetingLink: eventResult.meetingLink,
+					})
 					.where(eq(bookings.id, booking[0].id));
 			} catch (error) {
 				console.error("Failed to create calendar event:", error);
@@ -237,6 +240,7 @@ export class BookingService {
 				meetingType: {
 					with: {
 						company: true,
+						location: true,
 					},
 				},
 			},
@@ -278,6 +282,7 @@ export class BookingService {
 				meetingType: {
 					with: {
 						company: true,
+						location: true,
 					},
 				},
 			},
@@ -316,6 +321,7 @@ export class BookingService {
 				meetingType: {
 					with: {
 						company: true,
+						location: true,
 					},
 				},
 			},
@@ -353,6 +359,7 @@ export class BookingService {
 				meetingType: {
 					with: {
 						company: true,
+						location: true,
 					},
 				},
 			},
@@ -457,6 +464,7 @@ export class BookingService {
 				meetingType: {
 					with: {
 						company: true,
+						location: true,
 					},
 				},
 			},
@@ -595,36 +603,48 @@ export class BookingService {
 			.where(eq(bookings.id, bookingId))
 			.returning();
 
-		// Create calendar event now that it's approved
-		try {
-			// Ensure meeting type has a selected calendar
-			if (!booking.meetingType.selectedCalendarId) {
-				throw new Error(
-					`Meeting type "${booking.meetingType.name}" must have a selected calendar before events can be created.`
-				);
+		// Create calendar event now that it's approved - but only if one doesn't already exist
+		if (!booking.googleEventId) {
+			try {
+				// Ensure meeting type has a selected calendar
+				if (!booking.meetingType.selectedCalendarId) {
+					throw new Error(
+						`Meeting type "${booking.meetingType.name}" must have a selected calendar before events can be created.`
+					);
+				}
+
+				const eventResult = await this.calendarService.createEvent({
+					companyId: booking.meetingType.companyId,
+					companySlug: booking.meetingType.company.slug,
+					guestName: booking.guestName,
+					guestEmail: booking.guestEmail,
+					startTime: booking.startTime,
+					endTime: booking.endTime,
+					meetingTypeName: booking.meetingType.name,
+					duration: booking.meetingType.duration,
+					notes: booking.guestNotes || undefined,
+					calendarId: booking.meetingType.selectedCalendarId, // Required - no fallback
+					cancellationToken: booking.cancellationToken || undefined, // Include cancellation token
+					location: booking.meetingType.location || undefined, // Include location information
+					bookingId: booking.id, // Include booking ID as reservation number
+				});
+
+				// Update booking with Google event ID and meeting link
+				await db
+					.update(bookings)
+					.set({
+						googleEventId: eventResult.eventId,
+						meetingLink: eventResult.meetingLink,
+					})
+					.where(eq(bookings.id, bookingId));
+			} catch (error) {
+				console.error("Failed to create calendar event:", error);
+				// Don't fail the approval if calendar creation fails
 			}
-
-			const eventId = await this.calendarService.createEvent({
-				companyId: booking.meetingType.companyId,
-				companySlug: booking.meetingType.company.slug,
-				guestName: booking.guestName,
-				guestEmail: booking.guestEmail,
-				startTime: booking.startTime,
-				endTime: booking.endTime,
-				meetingTypeName: booking.meetingType.name,
-				duration: booking.meetingType.duration,
-				notes: booking.guestNotes || undefined,
-				calendarId: booking.meetingType.selectedCalendarId, // Required - no fallback
-				cancellationToken: booking.cancellationToken || undefined, // Include cancellation token
-				location: booking.meetingType.location || undefined, // Include location information
-				bookingId: booking.id, // Include booking ID as reservation number
-			});
-
-			// Update booking with Google event ID
-			await db.update(bookings).set({ googleEventId: eventId }).where(eq(bookings.id, bookingId));
-		} catch (error) {
-			console.error("Failed to create calendar event:", error);
-			// Don't fail the approval if calendar creation fails
+		} else {
+			console.log(
+				`Booking ${bookingId} already has a calendar event (${booking.googleEventId}), skipping creation`
+			);
 		}
 
 		// Notify host about approval

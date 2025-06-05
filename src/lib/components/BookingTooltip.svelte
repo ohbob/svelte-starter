@@ -26,6 +26,36 @@
 		});
 	}
 
+	function formatLocationDetails(location, meetingLink) {
+		if (!location) return null;
+
+		if (location.type === "virtual") {
+			let details = `💻 ${location.name} (Virtual Meeting)`;
+
+			// Show actual meeting link if available, otherwise show the configured link or auto-generation message
+			if (meetingLink) {
+				details += `\n🔗 ${meetingLink}`;
+			} else if (location.customMeetingUrl) {
+				details += `\n🔗 ${location.customMeetingUrl}`;
+			} else if (location.platform === "google_meet" && location.autoGenerateLink) {
+				details += "\n🔗 Google Meet link will be generated automatically";
+			}
+			return details;
+		} else {
+			let details = `📍 ${location.name}`;
+			if (location.address) {
+				details += `\n${location.address}`;
+				if (location.city) details += `, ${location.city}`;
+				if (location.state) details += `, ${location.state}`;
+				if (location.country) details += `, ${location.country}`;
+			}
+			if (location.phone) {
+				details += `\n📞 ${location.phone}`;
+			}
+			return details;
+		}
+	}
+
 	function handleNoteClick() {
 		onOpenNoteModal(booking);
 		onClose();
@@ -66,6 +96,37 @@
 			{/if}
 		</div>
 
+		<!-- Reservation Number -->
+		<div class="border-t border-gray-200 pt-3">
+			<div class="font-medium text-gray-900">Reservation #</div>
+			<div class="select-text font-mono text-xs text-gray-600">{booking.id}</div>
+		</div>
+
+		<!-- Location Information -->
+		{#if booking.meetingType.location}
+			<div class="border-t border-gray-200 pt-3">
+				<div class="font-medium text-gray-900">Location</div>
+				<div class="select-text whitespace-pre-line text-gray-700">
+					{formatLocationDetails(booking.meetingType.location, booking.meetingLink)}
+				</div>
+			</div>
+		{/if}
+
+		<!-- Meeting Link (if available) -->
+		{#if booking.meetingLink}
+			<div class="border-t border-gray-200 pt-3">
+				<div class="font-medium text-gray-900">Meeting Link</div>
+				<a
+					href={booking.meetingLink}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="select-text break-all text-blue-600 underline hover:text-blue-800"
+				>
+					{booking.meetingLink}
+				</a>
+			</div>
+		{/if}
+
 		<!-- Guest Notes -->
 		{#if booking.guestNotes}
 			<div class="border-t border-gray-200 pt-3">
@@ -95,9 +156,9 @@
 		<!-- Action Icons -->
 		<div class="border-t border-gray-200 pt-3">
 			<div class="flex items-center justify-between">
-				<div class="text-xs text-gray-500">Quick Actions</div>
-				<div class="flex items-center gap-1">
-					<!-- Edit Note Icon -->
+				<div class="font-medium text-gray-900">Quick Actions</div>
+				<div class="flex items-center gap-2">
+					<!-- Add/Edit Note Icon -->
 					<button
 						type="button"
 						title={booking.hostNotes ? "Edit Note" : "Add Note"}
@@ -109,7 +170,7 @@
 								stroke-linecap="round"
 								stroke-linejoin="round"
 								stroke-width="2"
-								d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
+								d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
 							/>
 						</svg>
 					</button>

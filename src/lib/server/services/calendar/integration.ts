@@ -352,7 +352,7 @@ export class CalendarIntegrationService {
 		cancellationToken?: string; // Cancellation token for client cancellation
 		location?: any; // Location information from meeting type
 		bookingId?: string; // Booking ID for reservation number
-	}): Promise<string> {
+	}): Promise<{ eventId: string; meetingLink?: string }> {
 		const integration = await this.setupAuthForCompany(bookingData.companyId);
 
 		// Use the specific calendar ID if provided, otherwise fall back to company default
@@ -549,37 +549,37 @@ Guest: ${bookingData.guestName} (${bookingData.guestEmail})`;
 		}
 
 		// If we generated a Google Meet link, update the event description with the actual link
-		if (conferenceData?.createRequest && response.data.hangoutLink) {
-			console.log("🔍 [DEBUG] Google Meet link generated:", response.data.hangoutLink);
+		// if (conferenceData?.createRequest && response.data.hangoutLink) {
+		// 	console.log("🔍 [DEBUG] Google Meet link generated:", response.data.hangoutLink);
 
-			// Update the description to replace the placeholder with the actual link
-			const updatedDescription = description.replace(
-				"🔗 Google Meet link will be generated automatically",
-				`🔗 Join Meeting: ${response.data.hangoutLink}`
-			);
+		// 	// Update the description to replace the placeholder with the actual link
+		// 	const updatedDescription = description.replace(
+		// 		"🔗 Google Meet link will be generated automatically",
+		// 		`🔗 Join Meeting: ${response.data.hangoutLink}`
+		// 	);
 
-			// Update the event with the actual Google Meet link in the description
-			try {
-				await this.calendar.events.patch({
-					calendarId: targetCalendarId,
-					eventId: response.data.id,
-					requestBody: {
-						description: updatedDescription.trim(),
-					},
-				});
-				console.log("🔍 [DEBUG] Event description updated with actual Google Meet link");
-			} catch (error) {
-				console.error("Failed to update event description with Google Meet link:", error);
-				// Don't fail the entire operation if description update fails
-			}
-		}
+		// 	// Update the event with the actual Google Meet link in the description
+		// 	try {
+		// 		await this.calendar.events.patch({
+		// 			calendarId: targetCalendarId,
+		// 			eventId: response.data.id,
+		// 			requestBody: {
+		// 				description: updatedDescription.trim(),
+		// 			},
+		// 		});
+		// 		console.log("🔍 [DEBUG] Event description updated with actual Google Meet link");
+		// 	} catch (error) {
+		// 		console.error("Failed to update event description with Google Meet link:", error);
+		// 		// Don't fail the entire operation if description update fails
+		// 	}
+		// }
 
-		console.log(`Calendar event created successfully: ${response.data.id}`);
+		// console.log(`Calendar event created successfully: ${response.data.id}`);
 
 		// Clear relevant caches when a booking is made
 		this.clearAllCaches(bookingData.companyId);
 
-		return response.data.id;
+		return { eventId: response.data.id, meetingLink: response.data.hangoutLink || undefined };
 	}
 
 	// Cancel calendar event

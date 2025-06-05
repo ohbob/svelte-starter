@@ -24,6 +24,33 @@
 		return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 	}
 
+	function formatLocationDetails(location, meetingLink) {
+		if (!location) return null;
+
+		if (location.type === "virtual") {
+			let details = `💻 ${location.name} (Virtual Meeting)`;
+
+			// Show actual meeting link if available, otherwise show the configured link or auto-generation message
+			if (meetingLink) {
+				details += ` - ${meetingLink}`;
+			} else if (location.customMeetingUrl) {
+				details += ` - ${location.customMeetingUrl}`;
+			} else if (location.platform === "google_meet" && location.autoGenerateLink) {
+				details += " - Google Meet link will be generated automatically";
+			}
+			return details;
+		} else {
+			let details = `📍 ${location.name}`;
+			if (location.address) {
+				details += ` - ${location.address}`;
+				if (location.city) details += `, ${location.city}`;
+				if (location.state) details += `, ${location.state}`;
+				if (location.country) details += `, ${location.country}`;
+			}
+			return details;
+		}
+	}
+
 	function getStatusColor(status) {
 		switch (status) {
 			case "confirmed":
@@ -100,7 +127,6 @@
 							>
 								Reject
 							</button>
-						{:else if booking.status === "confirmed"}
 							<!-- Cancel Button -->
 							<button
 								type="button"
@@ -146,6 +172,67 @@
 							<span class="text-gray-400">•</span>
 							<span>{booking.guestEmail}</span>
 						</div>
+
+						<!-- Reservation Number -->
+						<div class="flex items-center gap-2">
+							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+								/>
+							</svg>
+							<span class="font-medium">Reservation #:</span>
+							<span class="font-mono text-xs">{booking.id}</span>
+						</div>
+
+						<!-- Location Information -->
+						{#if booking.meetingType.location}
+							<div class="flex items-start gap-2">
+								<svg class="mt-0.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+									/>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+									/>
+								</svg>
+								<span
+									>{formatLocationDetails(booking.meetingType.location, booking.meetingLink)}</span
+								>
+							</div>
+						{/if}
+
+						<!-- Meeting Link (if available) -->
+						{#if booking.meetingLink}
+							<div class="flex items-center gap-2">
+								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+									/>
+								</svg>
+								<span class="font-medium">Meeting Link:</span>
+								<a
+									href={booking.meetingLink}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="break-all text-blue-600 underline hover:text-blue-800"
+								>
+									{booking.meetingLink}
+								</a>
+							</div>
+						{/if}
+
 						{#if booking.guestPhone}
 							<div class="flex items-center gap-2">
 								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -166,10 +253,11 @@
 										stroke-linecap="round"
 										stroke-linejoin="round"
 										stroke-width="2"
-										d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
+										d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
 									/>
 								</svg>
-								<span class="text-gray-500">{booking.guestNotes}</span>
+								<span class="font-medium text-gray-700">Guest Message:</span>
+								<span class="text-gray-600">{booking.guestNotes}</span>
 							</div>
 						{/if}
 						{#if booking.hostNotes}
@@ -182,7 +270,8 @@
 										d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
 									/>
 								</svg>
-								<span class="font-medium text-blue-600">Your note: {booking.hostNotes}</span>
+								<span class="font-medium text-blue-700">Your Note:</span>
+								<span class="text-blue-600">{booking.hostNotes}</span>
 							</div>
 						{/if}
 						{#if booking.cancellationReason && (booking.status === "cancelled" || booking.status === "rejected")}

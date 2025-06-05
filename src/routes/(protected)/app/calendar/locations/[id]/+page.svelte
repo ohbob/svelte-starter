@@ -34,30 +34,38 @@
 	});
 
 	// Validation
-	let isFormValid = $derived(() => {
-		if (!formData.name.trim()) return false;
-
-		if (formData.type === "in-person") {
-			return formData.address.trim() !== "";
-		} else {
-			// Virtual meeting validation
-			if (formData.platform === "custom") {
-				return formData.customMeetingUrl.trim() !== "";
-			}
-			return true;
-		}
-	});
+	let isFormValid = $derived(
+		formData.name.trim() !== "" &&
+			(formData.type === "in-person"
+				? formData.address.trim() !== ""
+				: formData.platform !== "custom" || formData.customMeetingUrl.trim() !== "")
+	);
 
 	function handleSubmit() {
 		if (!isFormValid) {
+			console.log("Form validation failed:", {
+				name: formData.name.trim(),
+				type: formData.type,
+				address: formData.address?.trim(),
+				platform: formData.platform,
+				customMeetingUrl: formData.customMeetingUrl?.trim(),
+			});
 			return () => {};
 		}
 
 		loading = true;
 		return async ({ result, update }) => {
+			console.log("Form submission result:", result);
+
 			if (result.type === "redirect") {
+				console.log("Redirecting to:", result.location);
 				goto(result.location);
+			} else if (result.type === "failure") {
+				console.log("Form submission failed:", result.data);
+				await update();
+				loading = false;
 			} else {
+				console.log("Form submission completed, updating page");
 				await update();
 				loading = false;
 			}

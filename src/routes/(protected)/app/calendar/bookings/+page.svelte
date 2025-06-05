@@ -474,16 +474,16 @@
 							{#if searchQuery}for "{searchQuery}"{/if}
 							{#if statusFilter !== "all"}with status "{statusFilter}"{/if}
 							- Calendar view shows results within visible date range
-						{/if}
+													{/if}
 					</p>
 					{#if currentView !== "list" && data.totalBookings > data.bookings.length}
 						<p class="mt-1 text-xs text-blue-600">
 							Switch to List view to see all results with pagination
 						</p>
-					{/if}
-				</div>
-			</div>
-		</div>
+													{/if}
+													</div>
+												</div>
+											</div>
 	{/if} -->
 
 	<!-- Calendar Views -->

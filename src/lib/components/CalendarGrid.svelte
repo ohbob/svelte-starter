@@ -71,6 +71,25 @@
 		return format(date, "MMM d, yyyy 'at' h:mm a");
 	}
 
+	function formatBookingTitle(booking) {
+		let title = `${booking.meetingType.name} - ${formatDateTime(booking.startTime)} with ${booking.guestName}`;
+		title += ` | Reservation: ${booking.id}`;
+
+		if (booking.meetingType.location) {
+			const locationIcon = booking.meetingType.location.type === "virtual" ? "💻" : "📍";
+			title += ` | ${locationIcon} ${booking.meetingType.location.name}`;
+
+			// Add meeting link if available
+			if (booking.meetingLink) {
+				title += ` | 🔗 ${booking.meetingLink}`;
+			}
+		} else {
+			title += " | No location";
+		}
+
+		return title;
+	}
+
 	function getStatusColor(status) {
 		switch (status) {
 			case "confirmed":
@@ -225,9 +244,7 @@
 									)} cursor-pointer hover:shadow-sm"
 									onmouseenter={(e) => handleBookingMouseEnter(booking, e)}
 									onmouseleave={handleBookingMouseLeave}
-									title="{booking.meetingType.name} - {formatDateTime(
-										booking.startTime
-									)} with {booking.guestName}"
+									title={formatBookingTitle(booking)}
 								>
 									<div class="flex items-center justify-between">
 										<div class="flex min-w-0 flex-1 items-center gap-1">
