@@ -40,7 +40,7 @@
 			} else if (location.platform === "google_meet" && location.autoGenerateLink) {
 				details += "\n🔗 Google Meet link will be generated automatically";
 			}
-			return details;
+			return null;
 		} else {
 			let details = `📍 ${location.name}`;
 			if (location.address) {
@@ -102,8 +102,8 @@
 			<div class="select-text font-mono text-xs text-gray-600">{booking.id}</div>
 		</div>
 
-		<!-- Location Information -->
-		{#if booking.meetingType.location}
+		Location Information
+		{#if booking.meetingType.location && !booking.meetingLink}
 			<div class="border-t border-gray-200 pt-3">
 				<div class="font-medium text-gray-900">Location</div>
 				<div class="select-text whitespace-pre-line text-gray-700">
